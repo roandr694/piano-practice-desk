@@ -128,12 +128,13 @@ p.note{color:var(--muted);max-width:66ch;margin:0 0 14px}
 .blocks{display:flex;flex-direction:column;gap:8px}
 .block{display:grid;grid-template-columns:46px minmax(0,1fr) 26px;min-width:0;gap:14px;align-items:start;
   background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:13px 14px;
-  box-shadow:var(--shadow)}
+  box-shadow:var(--shadow);transition:opacity .3s ease,border-color .15s ease}
+.block:hover{border-color:var(--rule-strong)}
 .block .min{font-family:"IBM Plex Mono",monospace;font-size:19px;color:var(--brass);
   font-variant-numeric:tabular-nums;line-height:1.2}
 .block .min small{display:block;font-size:9.5px;color:var(--faint);letter-spacing:.1em;
   text-transform:uppercase;font-family:"IBM Plex Sans",sans-serif}
-.block b{display:block;font-size:14.5px;margin-bottom:2px}
+.block b{display:block;font-size:14.5px;margin-bottom:2px;transition:color .3s ease}
 .block p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.5}
 .block input{width:19px;height:19px;accent-color:var(--felt);cursor:pointer;margin:2px 0 0}
 .block.done{opacity:.5}
@@ -288,6 +289,18 @@ tr.is-today td{background:var(--brass-soft)}
   .railfoot{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media print{
+  .rail,.runner,.dayline,.aside,.playrow,input[type=checkbox]{display:none!important}
+  body{background:#fff;color:#000;font-size:12px}
+  .shell{display:block}
+  main{padding:0 6px}
+  .today{grid-template-columns:1fr}
+  .block{box-shadow:none;border:1px solid #999;break-inside:avoid;background:#fff}
+  .block.done{opacity:1}
+  .study{break-inside:avoid}
+  .plate{break-inside:avoid}
+  a[href]:after{content:""}
+}
 </style>
 
 </head>
@@ -320,7 +333,10 @@ tr.is-today td{background:var(--brass-soft)}
   </div>
 
   <nav id="nav"></nav>
-  <button class="themetog" id="theme" type="button">Switch theme</button>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <button class="themetog" id="theme" type="button">Switch theme</button>
+    <button class="themetog" id="backup" type="button">Backup / restore progress</button>
+  </div>
   <div class="railfoot">262 engraved examples.<br>100 sight-reading pieces.<br>Notation set in LilyPond.</div>
 </aside>
 
@@ -363,6 +379,36 @@ document.getElementById("theme").onclick = () => {
   const sysDark = matchMedia("(prefers-color-scheme: dark)").matches;
   const next = cur ? (cur === "dark" ? "light" : "dark") : (sysDark ? "light" : "dark");
   root.setAttribute("data-theme", next); store.set("theme", next);
+};
+
+/* ---------- backup / restore (no server — a copyable code moves progress between devices) ---------- */
+document.getElementById("backup").onclick = () => {
+  try {
+    const toRestore = confirm(
+      "Practice Desk stores your streak, checklists and drill scores only on this device.\n\n" +
+      "Click OK to get a backup code to copy to another device.\n" +
+      "Click Cancel if you already have a code and want to restore it here."
+    );
+    if (toRestore){
+      const dump = {};
+      for (let i=0; i<localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (k.startsWith("pd_")) dump[k] = localStorage.getItem(k);
+      }
+      const code = btoa(unescape(encodeURIComponent(JSON.stringify(dump))));
+      prompt("Your backup code — copy it, then paste it into “Backup / restore” on the other device:", code);
+    } else {
+      const code = prompt("Paste your backup code:");
+      if (!code) return;
+      const dump = JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
+      Object.keys(dump).forEach(k => localStorage.setItem(k, dump[k]));
+      alert("Restored. Reloading…");
+      location.reload();
+    }
+  } catch(e){
+    alert("Couldn't complete that — either the code didn't look right, or this browser " +
+          "doesn't allow pop-up dialogs. Try opening Practice Desk in a regular browser tab.");
+  }
 };
 
 /* ---------- metronome ---------- */
@@ -625,11 +671,13 @@ function renderToday(){
     </div>
     <div class="aside">
       <div class="card"><h4>Your record</h4>
+        ${(st.streak||st.weekMin||st.count) ? `
         <div class="streaks">
           <div><b>${st.streak}</b><span>day streak</span></div>
           <div><b>${st.weekMin}</b><span>min this week</span></div>
           <div><b>${st.count}</b><span>sessions</span></div>
-        </div>
+        </div>` : `<p style="margin:0;font-size:13.5px;color:var(--muted)">No sessions logged yet —
+        start today's session below and your streak starts here.</p>`}
       </div>
       <div class="card"><h4>Scale focus</h4><p style="margin:0;font-size:14px">${esc(d.scales)}</p></div>
       <div class="card"><h4>The three-times rule</h4>
@@ -692,6 +740,9 @@ function renderScales(){
     `<button type="button" data-key="${i}" aria-pressed="${i===scaleKey}">
       <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
   ${plate(plateId, title, meta)}
+  <div class="rctl playrow" style="margin:-6px 0 16px">
+    <button type="button" class="primary" data-scaleplay="1">▶ Play this scale</button>
+  </div>
   <dl class="fingtab">
     <dt>Notes</dt><dd style="font-family:inherit;letter-spacing:0">${esc(notes)}</dd>
     <dt>Right hand</dt><dd>${k.rh}</dd>
@@ -719,7 +770,9 @@ document.getElementById("p-scales").addEventListener("click", e => {
   const f = e.target.closest("button[data-form]");
   if (f){ scaleForm = f.dataset.form; renderScales(); window.scrollTo({top:0,behavior:"instant"}); return; }
   const k = e.target.closest("button[data-key]");
-  if (k){ scaleKey = +k.dataset.key; renderScales(); }
+  if (k){ scaleKey = +k.dataset.key; renderScales(); return; }
+  const p = e.target.closest("button[data-scaleplay]");
+  if (p) playScaleAudio();
 });
 
 /* ---------- ARPEGGIOS ---------- */
@@ -737,6 +790,9 @@ function renderArps(){
     `<button type="button" data-arp="${i}" aria-pressed="${i===arpKey}">
       <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
   ${plate(k.arp, k.arplbl, "root position, two octaves \u00b7 major then parallel minor")}
+  <div class="rctl playrow" style="margin:-6px 0 16px">
+    <button type="button" class="primary" data-arpplay="1">\u25b6 Play this arpeggio</button>
+  </div>
   <div class="rulebox"><b>Standard fingering \u2014 the same in every key</b>
     RH <span class="mono">1 2 3 \u00b7 1 2 3 \u00b7 5</span> &nbsp; LH <span class="mono">5 3 2 1 \u00b7 3 2 1</span>.
     The thumb falls only on the root, so root-position arpeggios need far less memory work than
@@ -764,8 +820,10 @@ function renderArps(){
   ${plate("ex_arp4oct","C major arpeggio, four octaves","right hand \u2014 let the elbow carry the hand along the keyboard")}`;
 }
 document.getElementById("p-arps").addEventListener("click", e => {
-  const b = e.target.closest("button[data-arp]"); if (!b) return;
-  arpKey = +b.dataset.arp; renderArps();
+  const b = e.target.closest("button[data-arp]");
+  if (b){ arpKey = +b.dataset.arp; renderArps(); return; }
+  const p = e.target.closest("button[data-arpplay]");
+  if (p) playArpAudio();
 });
 
 /* ---------- STUDIES ---------- */
@@ -876,6 +934,45 @@ function playSet(midis, mode, gap){
   else midis.forEach((m,i)=>noteTone(m, t0+i*(gap||0.55), 1.1, 0.24));
 }
 const NOTENAMES = ["C","C\u266f","D","E\u266d","E","F","F\u266f","G","A\u266d","A","B\u266d","B"];
+
+/* ---------- scale / arpeggio playback ---------- */
+function noteSemitone(n){
+  const letter = {C:0,D:2,E:4,F:5,G:7,A:9,B:11}[n[0]];
+  let acc = 0;
+  for (const c of n.slice(1)) { if (c==="#") acc++; else if (c==="b") acc--; }
+  return ((letter+acc)%12+12)%12;
+}
+function scaleOffsets(notesStr){
+  const pcs = notesStr.trim().split(/\s+/).map(noteSemitone);
+  const root = pcs[0];
+  const offs = pcs.map(p=>((p-root)+12)%12);
+  offs[0] = 0;
+  return {root, offs};
+}
+function upDownRun(offsets, rootMidi){
+  const up = [];
+  offsets.forEach(o=>up.push(rootMidi+o));
+  offsets.forEach(o=>up.push(rootMidi+12+o));
+  up.push(rootMidi+24);
+  return up.concat(up.slice(0, up.length-1).reverse());
+}
+function playRun(seq, secPerNote){
+  if (!ensureAudio()) return;
+  let t = ac.currentTime + 0.08;
+  seq.forEach(m=>{ noteTone(m, t, secPerNote*0.92, 0.22); t += secPerNote; });
+}
+function playScaleAudio(){
+  const list = scaleForm==="major" ? DATA.majors : DATA.minors;
+  const k = list[scaleKey];
+  const notesStr = scaleForm==="major" ? k.notes : k.notes[scaleForm];
+  const {root, offs} = scaleOffsets(notesStr);
+  playRun(upDownRun(offs, 48+root), 30/bpm);
+}
+function playArpAudio(){
+  const k = DATA.majors[arpKey];
+  const root = noteSemitone(k.notes.trim().split(/\s+/)[0]);
+  playRun(upDownRun([0,4,7], 48+root), 30/bpm);
+}
 
 let drillTab = store.get("drilltab","ear");
 const DRILL_TABS = [["ear","Ear training"],["sight","Sight-reading"],["ks","Key signatures"],
