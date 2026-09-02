@@ -316,6 +316,41 @@ tr.is-today td{background:var(--brass-soft)}
 .study{transition:background-color .4s ease}
 .study.flash{background-color:var(--brass-soft);border-radius:8px}
 
+.myrep{background:var(--sunk);border:1px solid var(--rule);border-radius:9px;padding:15px 16px;margin-bottom:22px}
+.myrephd{margin-bottom:11px}
+.myrephd h3{font-size:13px;font-weight:600;margin:0 0 2px}
+.myrephd span{font-size:12.5px;color:var(--muted)}
+.myrepform{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.myrepform input[type=text],.myrepform select{background:var(--surface);border:1px solid var(--rule);
+  border-radius:6px;padding:7px 10px;font:inherit;font-size:13.5px;color:var(--ink)}
+.myrepform input[type=text]{flex:1 1 160px;min-width:0}
+.myrepform select{flex:0 1 190px}
+.myrepform input[type=text]:focus-visible,.myrepform select:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+.myrepform button{background:var(--felt);border:1px solid var(--felt);color:var(--on-felt);font-weight:600;
+  border-radius:6px;padding:7px 16px;font-size:13.5px;cursor:pointer;flex:0 0 auto}
+.myreplist{display:flex;flex-direction:column;gap:8px}
+.mritem{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;
+  background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:10px 12px}
+.mrstatus{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;
+  padding:5px 10px;border:1px solid var(--rule);background:var(--sunk);color:var(--muted);cursor:pointer;white-space:nowrap}
+.mrstatus:hover{border-color:var(--rule-strong)}
+.mrstatus.learning{border-color:var(--brass);color:var(--brass)}
+.mrstatus.polishing{border-color:var(--felt);color:var(--felt)}
+.mrbody{min-width:0}
+.mrhd{font-size:14px;margin-bottom:5px}
+.mrhd b{font-weight:600}
+.mrcomp{color:var(--faint);font-size:12px}
+.mrnote{width:100%;background:var(--sunk);border:1px solid var(--rule);border-radius:6px;
+  padding:5px 9px;font:inherit;font-size:12.5px;color:var(--ink)}
+.mrnote:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+.mrremove{background:none;border:1px solid var(--rule);border-radius:6px;color:var(--faint);
+  width:26px;height:26px;cursor:pointer;line-height:1}
+.mrremove:hover{border-color:var(--brass);color:var(--brass)}
+.repchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.repchip{font-size:11px;border-radius:999px;padding:3px 9px;border:1px solid var(--rule);color:var(--muted)}
+.repchip.learning{border-color:var(--brass);color:var(--brass)}
+.repchip.polishing{border-color:var(--felt);color:var(--felt)}
+
 @media (max-width:900px){
   .shell{grid-template-columns:minmax(0,1fr)}
   .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--rule);
@@ -406,6 +441,7 @@ const store = {
   set(k,v){ try{ localStorage.setItem("pd_"+k, JSON.stringify(v)); }catch(e){} }
 };
 const esc = s => String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const escAttr = s => esc(s).replace(/"/g, "&quot;");
 const matchLevel = (lvlStr, filter) =>
   filter==="All" || lvlStr==="all" || lvlStr.split(/[–-]/).includes(filter);
 const plate = (id, title, meta) => {
@@ -699,12 +735,18 @@ function renderToday(){
   <div class="today">
     <div>
       <h3 class="sub">The session &middot; ${total} minutes</h3>
-      <div class="blocks">${blocks.map((b,i)=>`
+      <div class="blocks">${blocks.map((b,i)=>{
+        const rep = b[1]==="Repertoire" ? myRep() : [];
+        return `
         <label class="block${done.includes(i)?" done":""}"${run&&run.i===i?' style="border-color:var(--brass)"':""}>
           <span class="min">${b[0]}<small>min</small></span>
-          <span><b>${esc(b[1])}</b><p>${esc(b[2])}</p></span>
+          <span><b>${esc(b[1])}</b><p>${esc(b[2])}</p>
+            ${rep.length ? `<div class="repchips">${rep.map(r=>
+              `<span class="repchip ${r.status}">${r.status==="learning"?"Learning":"Polishing"} &middot; ${esc(r.title)}</span>`).join("")}</div>` : ""}
+          </span>
           <input type="checkbox" data-i="${i}"${done.includes(i)?" checked":""} aria-label="Mark ${esc(b[1])} done">
-        </label>`).join("")}</div>
+        </label>`;
+      }).join("")}</div>
       ${studies.length ? `<h3 class="sub">Today's studies</h3>` + studies.map(s =>
         `<div class="study">
           <div class="hd"><span class="code">${s.code}</span><span class="t">${esc(s.t)}</span>
@@ -1497,6 +1539,47 @@ const REPERTOIRE = [
     ]}
 ];
 
+/* -- my repertoire: the pieces actually being practised, distinct from the catalog above -- */
+function myRep(){ return store.get("myrep", []); }
+function setMyRep(list){ store.set("myrep", list); }
+function addMyRepItem(title, composer, status){
+  title = title.trim();
+  if (!title) return;
+  const list = myRep();
+  list.push({id: "r"+Date.now()+Math.random().toString(36).slice(2,7), title, composer: (composer||"").trim(),
+             status: status==="polishing" ? "polishing" : "learning", note: ""});
+  setMyRep(list);
+}
+function renderMyRep(){
+  const list = myRep();
+  return `
+  <div class="myrep">
+    <div class="myrephd"><h3>My repertoire</h3>
+      <span>The pieces you're actually practising right now — these show up in today's session below.</span></div>
+    <form id="myrepform" class="myrepform">
+      <input type="text" id="mrTitle" placeholder="Piece title" maxlength="120" required>
+      <input type="text" id="mrComposer" placeholder="Composer (optional)" maxlength="80">
+      <select id="mrStatus" aria-label="Status">
+        <option value="learning">Learning — in sections</option>
+        <option value="polishing">Polishing — play-through</option>
+      </select>
+      <button type="submit" class="primary">Add</button>
+    </form>
+    ${list.length ? `<div class="myreplist">${list.map(r => `
+      <div class="mritem">
+        <button type="button" class="mrstatus ${r.status}" data-mrstatus="${r.id}"
+          aria-label="Toggle status, currently ${r.status==="learning"?"learning":"polishing"}">${r.status==="learning"?"Learning":"Polishing"}</button>
+        <div class="mrbody">
+          <div class="mrhd"><b>${esc(r.title)}</b>${r.composer ? ` <span class="mrcomp">${esc(r.composer)}</span>` : ""}</div>
+          <input type="text" class="mrnote" data-mrnote="${r.id}" value="${escAttr(r.note||"")}"
+            placeholder="Where you stopped, a trouble spot…" maxlength="200">
+        </div>
+        <button type="button" class="mrremove" data-mrremove="${r.id}" aria-label="Remove ${escAttr(r.title)} from my repertoire">✕</button>
+      </div>`).join("")}</div>`
+      : `<p class="note">Nothing tracked yet — add a piece above, or use “+ Track this piece” on any entry below.</p>`}
+  </div>`;
+}
+
 let repLevel = "All";
 function renderRepertoire(){
   const lvls = ["All","I","II","III","IV"];
@@ -1516,6 +1599,7 @@ function renderRepertoire(){
             <div class="metarow">
               ${p.key ? `<span>Key: ${esc(p.key)}</span>` : ""}
               ${p.scaleKey ? `<button type="button" data-goscale="${p.scaleKey.kind}:${p.scaleKey.id}">Practise this key →</button>` : ""}
+              <button type="button" data-addrep-title="${escAttr(p.title)}" data-addrep-composer="${escAttr(c.name)}">+ Track this piece</button>
             </div>
             <div class="studychips"><span>Builds on</span>${p.studies.map(code =>
               `<button type="button" data-gostudy="${code}">${code}</button>`).join("")}</div>
@@ -1545,6 +1629,7 @@ function renderRepertoire(){
     demands, points at the studies and scale that build it, and says where to find the score —
     work backwards from the music, not only forwards from the exercise.</p>
   </div>
+  ${renderMyRep()}
   <div class="mini" style="margin-bottom:8px"><span>Level</span>${lvls.map(l=>
     `<button type="button" data-replvl="${l}" aria-pressed="${l===repLevel}">${l}</button>`).join("")}</div>
   <div class="timeline">${eras || `<p class="note">No pieces at that level yet — try a wider range.</p>`}</div>`;
@@ -1555,7 +1640,32 @@ document.getElementById("p-repertoire").addEventListener("click", e => {
   const gs = e.target.closest("button[data-gostudy]");
   if (gs){ goToStudy(gs.dataset.gostudy); return; }
   const gk = e.target.closest("button[data-goscale]");
-  if (gk){ const [kind,id] = gk.dataset.goscale.split(":"); goToScale(kind,id); }
+  if (gk){ const [kind,id] = gk.dataset.goscale.split(":"); goToScale(kind,id); return; }
+  const ar = e.target.closest("button[data-addrep-title]");
+  if (ar){ addMyRepItem(ar.dataset.addrepTitle, ar.dataset.addrepComposer, "learning"); renderRepertoire(); return; }
+  const ms = e.target.closest("button[data-mrstatus]");
+  if (ms){
+    const list = myRep(); const item = list.find(r=>r.id===ms.dataset.mrstatus);
+    if (item){ item.status = item.status==="learning" ? "polishing" : "learning"; setMyRep(list); renderRepertoire(); renderToday(); }
+    return;
+  }
+  const mr = e.target.closest("button[data-mrremove]");
+  if (mr){ setMyRep(myRep().filter(r=>r.id!==mr.dataset.mrremove)); renderRepertoire(); renderToday(); }
+});
+document.getElementById("p-repertoire").addEventListener("submit", e => {
+  const f = e.target.closest("#myrepform"); if (!f) return;
+  e.preventDefault();
+  const title = document.getElementById("mrTitle").value;
+  const composer = document.getElementById("mrComposer").value;
+  const status = document.getElementById("mrStatus").value;
+  if (!title.trim()) return;
+  addMyRepItem(title, composer, status);
+  renderRepertoire(); renderToday();
+});
+document.getElementById("p-repertoire").addEventListener("change", e => {
+  const n = e.target.closest("input[data-mrnote]"); if (!n) return;
+  const list = myRep(); const item = list.find(r=>r.id===n.dataset.mrnote);
+  if (item){ item.note = n.value.slice(0,200); setMyRep(list); }
 });
 
 renderToday(); renderScales(); renderArps(); renderStudies(); renderTheory(); renderDrills(); renderRepertoire(); renderPlan();
