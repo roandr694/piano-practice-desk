@@ -275,6 +275,47 @@ tr.is-today td{background:var(--brass-soft)}
 .lvlpill{font-family:"IBM Plex Mono",monospace;font-size:11px;border:1px solid var(--rule);
   border-radius:4px;padding:1px 6px;color:var(--muted)}
 
+/* ---------- repertoire timeline ---------- */
+.timeline{position:relative;padding-left:24px;border-left:2px solid var(--rule);margin-top:10px}
+.tera{position:relative;margin-bottom:36px}
+.tera:last-child{margin-bottom:0}
+.tera:before{content:"";position:absolute;left:-31px;top:5px;width:10px;height:10px;
+  border-radius:50%;background:var(--brass);border:2px solid var(--paper)}
+.tera .years{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--brass)}
+.tera h2{font-family:"Instrument Serif",Georgia,serif;font-size:27px;font-weight:400;margin:2px 0 6px}
+.tera>p{margin:0 0 18px;color:var(--muted);font-size:13.5px;max-width:68ch}
+.composer{margin-bottom:20px}
+.composer:last-child{margin-bottom:0}
+.composer h3{font-size:14.5px;font-weight:600;margin:0 0 9px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.composer .life{font-weight:400;font-size:11.5px;color:var(--faint);font-family:"IBM Plex Mono",monospace}
+.pieces{display:flex;flex-direction:column;gap:10px}
+.piece{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:13px 15px;
+  box-shadow:var(--shadow)}
+.piece .phd{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 10px;margin-bottom:5px}
+.piece .phd b{font-family:"Instrument Serif",Georgia,serif;font-size:18px;font-weight:400}
+.piece .cat{font-size:11.5px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.piece .why{margin:0 0 10px;color:var(--muted);font-size:13.5px;max-width:70ch}
+.piece .metarow{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:12.5px;
+  color:var(--muted);margin-bottom:9px}
+.piece .metarow button{background:var(--sunk);border:1px solid var(--rule);border-radius:6px;
+  padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
+.piece .metarow button:hover{border-color:var(--brass);color:var(--ink)}
+.studychips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11.5px;
+  color:var(--faint);margin-bottom:9px}
+.studychips button{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--sunk);
+  border:1px solid var(--rule);border-radius:5px;padding:2px 7px;cursor:pointer;color:var(--muted)}
+.studychips button:hover{border-color:var(--brass);color:var(--ink)}
+.sourcerow{display:flex;flex-wrap:wrap;gap:9px;align-items:center;font-size:12px;
+  padding-top:9px;border-top:1px solid var(--rule)}
+.pd-badge,.cr-badge{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+  border-radius:4px;padding:1px 6px}
+.pd-badge{color:var(--ok);border:1px solid var(--ok)}
+.cr-badge{color:var(--warn);border:1px solid var(--warn)}
+.sourcerow a{color:var(--brass)}
+.study{transition:background-color .4s ease}
+.study.flash{background-color:var(--brass-soft);border-radius:8px}
+
 @media (max-width:900px){
   .shell{grid-template-columns:minmax(0,1fr)}
   .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--rule);
@@ -347,6 +388,7 @@ tr.is-today td{background:var(--brass-soft)}
   <div class="panel" id="p-studies" hidden></div>
   <div class="panel" id="p-theory" hidden></div>
   <div class="panel" id="p-drills" hidden></div>
+  <div class="panel" id="p-repertoire" hidden></div>
   <div class="panel" id="p-plan" hidden></div>
 </main>
 </div>
@@ -364,6 +406,8 @@ const store = {
   set(k,v){ try{ localStorage.setItem("pd_"+k, JSON.stringify(v)); }catch(e){} }
 };
 const esc = s => String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const matchLevel = (lvlStr, filter) =>
+  filter==="All" || lvlStr==="all" || lvlStr.split(/[–-]/).includes(filter);
 const plate = (id, title, meta) => {
   const cap = (title || meta)
     ? `<div class="platecap"><b>${title||""}</b><span class="meta">${meta||""}</span></div>` : "";
@@ -490,13 +534,16 @@ setBpm(bpm); drawBeats();
 
 /* ---------- navigation ---------- */
 const TABS=[["today","Session"],["scales","Scales"],["arps","Arpeggios"],["studies","Studies"],
-            ["theory","Theory"],["drills","Drills"],["plan","The plan"]];
+            ["theory","Theory"],["drills","Drills"],["repertoire","Repertoire"],["plan","The plan"]];
 document.getElementById("nav").innerHTML = TABS.map(([id,label],i)=>
   `<button type="button" data-tab="${id}"${i===0?' aria-current="true"':""}><span class="n">${String(i+1).padStart(2,"0")}</span>${label}</button>`).join("");
+function showTab(id){
+  document.querySelectorAll("#nav button").forEach(x=>x.setAttribute("aria-current", String(x.dataset.tab===id)));
+  TABS.forEach(([t])=>{ document.getElementById("p-"+t).hidden = (t !== id); });
+}
 document.getElementById("nav").onclick = e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
-  document.querySelectorAll("#nav button").forEach(x=>x.setAttribute("aria-current", x===b));
-  TABS.forEach(([id])=>{ document.getElementById("p-"+id).hidden = (id !== b.dataset.tab); });
+  showTab(b.dataset.tab);
   window.scrollTo({top:0, behavior:"instant"});
 };
 
@@ -832,8 +879,7 @@ function renderStudies(){
   const fams = ["All","Warm-up","Touch","Velocity","Polyphony"];
   const lvls = ["All","I","II","III","IV"];
   const list = DATA.studies.filter(s =>
-    (fam==="All" || s.fam===fam) &&
-    (lvlF==="All" || s.lvl.includes(lvlF) || s.lvl==="all"));
+    (fam==="All" || s.fam===fam) && matchLevel(s.lvl, lvlF));
   document.getElementById("p-studies").innerHTML = `
   <div class="phead">
     <div class="eyebrow">Part IV</div><h1>Technical studies</h1>
@@ -845,7 +891,7 @@ function renderStudies(){
     `<button type="button" data-fam="${f}" aria-pressed="${f===fam}">${f}</button>`).join("")}</div>
   <div class="mini" style="margin-bottom:20px"><span>Level</span>${lvls.map(l=>
     `<button type="button" data-lvl="${l}" aria-pressed="${l===lvlF}">${l}</button>`).join("")}</div>
-  ${list.length ? list.map(s=>`<div class="study">
+  ${list.length ? list.map(s=>`<div class="study" id="study-${s.code}">
     <div class="hd"><span class="code">${s.code}</span><span class="t">${esc(s.t)}</span>
       <span class="lv">${s.fam} &middot; Level ${s.lvl}</span></div>
     <p class="why"><b>Purpose:</b> ${esc(s.why)}</p>
@@ -1324,7 +1370,195 @@ function renderPlan(){
   });
 }
 
-renderToday(); renderScales(); renderArps(); renderStudies(); renderTheory(); renderDrills(); renderPlan();
+/* ---------- REPERTOIRE ---------- */
+function imslpSearch(q){ return "https://imslp.org/index.php?title=Special:Search&search=" + encodeURIComponent(q); }
+function goToStudy(code){
+  fam = "All"; lvlF = "All"; renderStudies();
+  showTab("studies");
+  setTimeout(() => {
+    const el = document.getElementById("study-"+code);
+    if (!el) return;
+    el.scrollIntoView({behavior:"smooth", block:"start"});
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 1600);
+  });
+}
+function goToScale(kind, id){
+  const list = kind==="major" ? DATA.majors : DATA.minors;
+  const idx = list.findIndex(k => k.id===id);
+  if (idx<0) return;
+  scaleForm = kind==="major" ? "major" : "natural";
+  scaleKey = idx;
+  renderScales();
+  showTab("scales");
+  window.scrollTo({top:0, behavior:"instant"});
+}
+
+const REPERTOIRE = [
+  { era:"Baroque", years:"1600–1750",
+    blurb:"Independent hands at a steady tempo — the left hand is not accompaniment yet, it carries its own line.",
+    composers:[
+      { name:"Christian Petzold", life:"1677–1733", pieces:[
+        { title:"Minuet in G major", cat:"BWV Anh. 114", year:"c.1725", level:"I–II", key:"G major",
+          scaleKey:{kind:"major", id:"G"}, studies:["A1","B1","D3"], pd:true,
+          source:"Notebook for Anna Magdalena Bach — long misattributed to J. S. Bach",
+          why:"A hands-together minuet in clean two-bar phrases, the melody sitting in one five-finger position the whole way through. The standard first piece for coordinating both hands at a calm tempo." },
+        { title:"Minuet in G minor", cat:"BWV Anh. 115", year:"c.1725", level:"II", key:"G minor",
+          scaleKey:{kind:"minor", id:"Gm"}, studies:["A2","B1"], pd:true,
+          source:"Notebook for Anna Magdalena Bach",
+          why:"The minor-key companion to the G major minuet — same texture, but the ear now has to place a lowered third and sixth instead of relying on white-key habit." }
+      ]},
+      { name:"Johann Sebastian Bach", life:"1685–1750", pieces:[
+        { title:"Musette in D major", cat:"BWV Anh. 126", year:"c.1725", level:"II", key:"D major",
+          scaleKey:{kind:"major", id:"D"}, studies:["A6","B1"], pd:true,
+          source:"Notebook for Anna Magdalena Bach",
+          why:"A drone bass held under a dancing right hand — the left hand must stay perfectly even and quiet while the right does the interesting work above it." },
+        { title:"Prelude in C major", cat:"BWV 846", year:"1722", level:"III", key:"C major",
+          scaleKey:{kind:"major", id:"C"}, studies:["C2","A6","C1"], pd:true,
+          source:"The Well-Tempered Clavier, Book I",
+          why:"One broken chord shape, repeated and reharmonised for two pages. The whole piece is a test of whether your hand can stay relaxed through a fixed, repeating figuration." }
+      ]}
+    ]},
+  { era:"Classical", years:"1750–1820",
+    blurb:"Clarity above all: even scales, clean articulation, phrases that balance in pairs like a sentence and its answer.",
+    composers:[
+      { name:"Wolfgang Amadeus Mozart", life:"1756–1791", pieces:[
+        { title:"Minuet in F major", cat:"K. 2", year:"1762", level:"I–II", key:"F major",
+          scaleKey:{kind:"major", id:"F"}, studies:["A1","B1","D3"], pd:true,
+          source:"Composed at age six",
+          why:"Four-bar phrases that answer each other exactly — the piece falls apart if the two hands don't lock together rhythmically, which is precisely the point." }
+      ]},
+      { name:"Muzio Clementi", life:"1752–1832", pieces:[
+        { title:"Sonatina in C major", cat:"Op. 36 No. 1, 1st movement", year:"1797", level:"II", key:"C major",
+          scaleKey:{kind:"major", id:"C"}, studies:["C2","C1","B3"], pd:true,
+          source:"Six Sonatinas, Op. 36",
+          why:"Textbook Alberti bass under a scale-and-arpeggio melody — this is the piece that Alberti-bass studies exist to prepare." }
+      ]},
+      { name:"Ludwig van Beethoven", life:"1770–1827", pieces:[
+        { title:"Für Elise", cat:"WoO 59", year:"c.1810", level:"III", key:"A minor",
+          scaleKey:{kind:"minor", id:"Am"}, studies:["C9","B7","D6"], pd:true, source:null,
+          why:"An ornamented melody over a left hand that keeps leaping — and later, broken chords that climb the keyboard under sustaining pedal. Better known than it is easy." }
+      ]}
+    ]},
+  { era:"Romantic", years:"1820–1900",
+    blurb:"The melody sings and the accompaniment supports it — balancing the hands' volume against each other becomes the main technical problem.",
+    composers:[
+      { name:"Robert Schumann", life:"1810–1856", pieces:[
+        { title:"Melodie", cat:"Album for the Young, Op. 68 No. 1", year:"1848", level:"I", key:"C major",
+          scaleKey:{kind:"major", id:"C"}, studies:["A1","B1"], pd:true, source:null,
+          why:"A singing, stepwise tune with almost no technical obstacle — written to teach phrasing and legato tone before either hand is asked to do anything difficult." }
+      ]},
+      { name:"Johann Friedrich Burgmüller", life:"1806–1874", pieces:[
+        { title:"Arabesque", cat:"Op. 100 No. 2", year:"1851", level:"II", key:"A minor",
+          scaleKey:{kind:"minor", id:"Am"}, studies:["A2","B1"], pd:true,
+          source:"25 Progressive Studies, Op. 100",
+          why:"Fast, light, alternating hands in the outer sections against a singing legato middle section — touch control in both directions inside one short piece." }
+      ]},
+      { name:"Frédéric Chopin", life:"1810–1849", pieces:[
+        { title:"Prelude in E minor", cat:"Op. 28 No. 4", year:"1839", level:"III", key:"E minor",
+          scaleKey:{kind:"minor", id:"Em"}, studies:["D2","B4","B7"], pd:true,
+          source:"24 Préludes, Op. 28",
+          why:"A held, mostly stepwise melody over repeated chords whose inner voices creep down chromatically. The left hand needs its own quiet, exact voice-leading — nothing here is decoration." }
+      ]},
+      { name:"Edvard Grieg", life:"1843–1907", pieces:[
+        { title:"Arietta", cat:"Lyric Pieces, Op. 12 No. 1", year:"1867", level:"II–III", key:"E-flat major",
+          scaleKey:{kind:"major", id:"Eb"}, studies:["B4","B6"], pd:true, source:null,
+          why:"A short, plain melody that has to be voiced above its own accompaniment on the same hand — the same chord, shaped four different ways, is what makes this sing." }
+      ]}
+    ]},
+  { era:"Impressionist", years:"1880–1920",
+    blurb:"Harmony stops resolving the way it used to. Ear, pedal foot and touch control start to matter more than finger speed.",
+    composers:[
+      { name:"Erik Satie", life:"1866–1925", pieces:[
+        { title:"Gymnopédie No. 1", cat:null, year:"1888", level:"III", key:"D major",
+          scaleKey:{kind:"major", id:"D"}, studies:["B4","B7","D2"], pd:true, source:null,
+          why:"A steady, quiet left-hand chord pulse that never lines up rhythmically with the free right-hand melody above it — genuine hand independence, at a tempo too slow to hide behind." }
+      ]},
+      { name:"Claude Debussy", life:"1862–1918", pieces:[
+        { title:"The Little Shepherd", cat:"Children's Corner, No. 5", year:"1908", level:"III", key:null,
+          scaleKey:null, studies:["B6","B3"], pd:true, source:null,
+          why:"Modal, pentatonic-flavoured phrases with almost no forte in the whole piece — the technical demand is tone colour and soft dynamic control, not speed or strength." }
+      ]}
+    ]},
+  { era:"20th century", years:"1900–2000",
+    blurb:"Folk rhythm, changing metre, and modes outside major and minor. Rhythmic precision replaces Romantic rubato.",
+    composers:[
+      { name:"Béla Bartók", life:"1881–1945", pieces:[
+        { title:"For Children, Vol. I, No. 1", cat:"Sz. 42", year:"1908–09, rev. 1943", level:"I–II", key:null,
+          scaleKey:null, studies:["A1","D3"], pd:true,
+          source:"Based on a Hungarian folksong",
+          why:"Simple hands-together writing, but in a folk mode that won't resolve the way a major or minor scale does — good ear training disguised as an easy piece." }
+      ]},
+      { name:"Dmitri Kabalevsky", life:"1904–1987", pieces:[
+        { title:"Clowns", cat:"Op. 39 No. 20", year:"1930s", level:"II", key:null,
+          scaleKey:null, studies:["C3","B3"], pd:false, source:null,
+          why:"Alternating major and minor across a few bars at a time, with sharp dynamic contrasts and quick hand-position jumps — a character study in comic staccato." }
+      ]}
+    ]}
+];
+
+let repLevel = "All";
+function renderRepertoire(){
+  const lvls = ["All","I","II","III","IV"];
+  const eras = REPERTOIRE.map(era => {
+    const composers = era.composers.map(c => {
+      const pieces = c.pieces.filter(p => matchLevel(p.level, repLevel));
+      if (!pieces.length) return "";
+      return `
+      <div class="composer">
+        <h3>${esc(c.name)} <span class="life">${esc(c.life)}</span></h3>
+        <div class="pieces">${pieces.map(p => `
+          <div class="piece">
+            <div class="phd"><b>${esc(p.title)}</b>
+              <span class="cat">${p.cat ? esc(p.cat)+" &middot; " : ""}${esc(p.year)}</span>
+              <span class="lvlpill">Level ${p.level}</span></div>
+            <p class="why">${esc(p.why)}</p>
+            <div class="metarow">
+              ${p.key ? `<span>Key: ${esc(p.key)}</span>` : ""}
+              ${p.scaleKey ? `<button type="button" data-goscale="${p.scaleKey.kind}:${p.scaleKey.id}">Practise this key →</button>` : ""}
+            </div>
+            <div class="studychips"><span>Builds on</span>${p.studies.map(code =>
+              `<button type="button" data-gostudy="${code}">${code}</button>`).join("")}</div>
+            <div class="sourcerow">
+              ${p.pd
+                ? `<span class="pd-badge">Public domain</span><a href="${imslpSearch(c.name+" "+p.title)}" target="_blank" rel="noopener noreferrer">Find the score on IMSLP ↗</a>`
+                : `<span class="cr-badge">In copyright</span><span style="color:var(--muted)">Published edition — check a library or sheet-music retailer</span>`}
+              ${p.source ? `<span style="color:var(--faint)">${esc(p.source)}</span>` : ""}
+            </div>
+          </div>`).join("")}
+        </div>
+      </div>`;
+    }).filter(Boolean).join("");
+    if (!composers) return "";
+    return `
+    <div class="tera">
+      <span class="years">${esc(era.years)}</span>
+      <h2>${esc(era.era)}</h2>
+      <p>${esc(era.blurb)}</p>
+      ${composers}
+    </div>`;
+  }).filter(Boolean).join("");
+  document.getElementById("p-repertoire").innerHTML = `
+  <div class="phead">
+    <div class="eyebrow">Repertoire</div><h1>Learning new music</h1>
+    <p>Technique exists to serve real pieces. Each entry below names what the piece actually
+    demands, points at the studies and scale that build it, and says where to find the score —
+    work backwards from the music, not only forwards from the exercise.</p>
+  </div>
+  <div class="mini" style="margin-bottom:8px"><span>Level</span>${lvls.map(l=>
+    `<button type="button" data-replvl="${l}" aria-pressed="${l===repLevel}">${l}</button>`).join("")}</div>
+  <div class="timeline">${eras || `<p class="note">No pieces at that level yet — try a wider range.</p>`}</div>`;
+}
+document.getElementById("p-repertoire").addEventListener("click", e => {
+  const lv = e.target.closest("button[data-replvl]");
+  if (lv){ repLevel = lv.dataset.replvl; renderRepertoire(); window.scrollTo({top:0,behavior:"instant"}); return; }
+  const gs = e.target.closest("button[data-gostudy]");
+  if (gs){ goToStudy(gs.dataset.gostudy); return; }
+  const gk = e.target.closest("button[data-goscale]");
+  if (gk){ const [kind,id] = gk.dataset.goscale.split(":"); goToScale(kind,id); }
+});
+
+renderToday(); renderScales(); renderArps(); renderStudies(); renderTheory(); renderDrills(); renderRepertoire(); renderPlan();
 </script>
 </body>
 </html>
