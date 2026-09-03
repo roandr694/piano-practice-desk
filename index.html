@@ -20,6 +20,7 @@
   --ok:#2C6E4B; --warn:#8C5A16; --on-felt:#FFFFFF;
   --kw:var(--key-w); --kb:var(--key-b); --kbt:var(--key-bt);
   --accent:var(--brass); --panel:var(--sunk); --bg:var(--surface);
+  --heat1:#CEC5AB; --heat2:#B7A57A; --heat3:#A2874D;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -31,6 +32,7 @@
     --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -16px rgba(0,0,0,.7);
     --key-w:#D9DCD7; --key-b:#0B0D0C; --key-bt:#AEB4AE; --mark:#DCC894; --key-t:#16191A;
     --ok:#6FBE8E; --warn:#D9AE5C; --on-felt:#0C0F0E;
+    --heat1:#4A3F25; --heat2:#7D6639; --heat3:#AC8B4B;
   }
 }
 :root[data-theme="dark"]{
@@ -42,6 +44,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -16px rgba(0,0,0,.7);
   --key-w:#D9DCD7; --key-b:#0B0D0C; --key-bt:#AEB4AE; --mark:#DCC894; --key-t:#16191A;
   --ok:#6FBE8E; --warn:#D9AE5C; --on-felt:#0C0F0E;
+  --heat1:#4A3F25; --heat2:#7D6639; --heat3:#AC8B4B;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -242,6 +245,34 @@ tr.is-today td{background:var(--brass-soft)}
 .streaks div{background:var(--sunk);border-radius:7px;padding:9px 10px;text-align:center}
 .streaks b{display:block;font-family:"IBM Plex Mono",monospace;font-size:20px;font-weight:500}
 .streaks span{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+
+/* ---------- practice history ---------- */
+.history{margin-top:24px;border-top:1px solid var(--rule);padding-top:14px}
+.history summary{cursor:pointer;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;list-style:none}
+.history summary::-webkit-details-marker{display:none}
+.history summary::before{content:"▸ ";color:var(--brass)}
+.history[open] summary::before{content:"▾ "}
+.history summary .hcount{text-transform:none;letter-spacing:0;font-weight:400;
+  color:var(--muted);margin-left:6px}
+.historybody{margin-top:16px}
+.heatwrap{overflow-x:auto;padding-bottom:4px}
+.heatmap{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;width:max-content}
+.heatmap .cell{width:11px;height:11px;border-radius:2px;background:var(--sunk)}
+.heatmap .cell.empty{background:transparent}
+.cell.lvl1{background:var(--heat1)}
+.cell.lvl2{background:var(--heat2)}
+.cell.lvl3{background:var(--heat3)}
+.cell.lvl4{background:var(--brass)}
+.heatlegend{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:11px;color:var(--faint)}
+.heatlegend .cell{width:11px;height:11px;border-radius:2px}
+.sessionlist{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;
+  gap:6px;max-width:480px}
+.sessionlist li{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;
+  padding:7px 11px;background:var(--sunk);border-radius:6px}
+.sessionlist .rd-date{color:var(--ink);font-weight:500}
+.sessionlist .rd-mins{font-family:"IBM Plex Mono",monospace;color:var(--brass);white-space:nowrap}
+.sessionlist .rd-r{color:var(--muted);font-size:12px;white-space:nowrap}
 
 /* ---------- drills ---------- */
 .drill{background:var(--surface);border:1px solid var(--rule);border-radius:9px;padding:16px 18px;
@@ -614,6 +645,56 @@ function stats(){
   const total = log.reduce((a,b)=>a+b.m,0);
   return {streak, weekMin, total, count: log.length};
 }
+function heatLevel(mins){
+  if (!mins) return 0;
+  if (mins < 20) return 1;
+  if (mins < 45) return 2;
+  if (mins < 75) return 3;
+  return 4;
+}
+function renderHistory(){
+  const log = store.get("log", []);
+  if (!log.length) return "";
+  const byDay = {};
+  log.forEach(x => { byDay[x.d] = (byDay[x.d]||0) + x.m; });
+  const WEEKS = 20;
+  const today = new Date();
+  const mondayOffset = (today.getDay()+6)%7;              // Mon=0..Sun=6
+  const thisMonday = new Date(today); thisMonday.setDate(today.getDate()-mondayOffset);
+  const start = new Date(thisMonday); start.setDate(thisMonday.getDate()-(WEEKS-1)*7);
+  const cells = [];
+  for (let i=0; i<WEEKS*7; i++){
+    const dt = new Date(start); dt.setDate(start.getDate()+i);
+    cells.push(dt > today ? null : dt);
+  }
+  const dfmt = dt => dt.toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"});
+  const cellsHTML = cells.map(dt => {
+    if (!dt) return `<span class="cell empty"></span>`;
+    const mins = byDay[isoDay(dt)]||0;
+    const label = mins ? `${dfmt(dt)} — ${mins} min` : dfmt(dt);
+    return `<span class="cell lvl${heatLevel(mins)}" title="${escAttr(label)}"></span>`;
+  }).join("");
+  const recent = log.slice(-10).reverse();
+  const recentHTML = recent.map(x => {
+    const dt = new Date(x.d+"T12:00");
+    return `<li><span class="rd-date">${esc(dfmt(dt))}</span>
+      <span class="rd-r">${esc(x.r)}-min session</span>
+      <span class="rd-mins">${x.m} min</span></li>`;
+  }).join("");
+  return `
+  <details class="history">
+    <summary>Practice history <span class="hcount">${log.length} session${log.length===1?"":"s"} logged</span></summary>
+    <div class="historybody">
+      <div class="heatwrap" aria-hidden="true">
+        <div class="heatmap">${cellsHTML}</div>
+        <div class="heatlegend"><span>Less</span><span class="cell lvl0"></span><span class="cell lvl1"></span>
+          <span class="cell lvl2"></span><span class="cell lvl3"></span><span class="cell lvl4"></span><span>More</span></div>
+      </div>
+      <h3 class="sub">Recent sessions</h3>
+      <ul class="sessionlist">${recentHTML}</ul>
+    </div>
+  </details>`;
+}
 
 /* -- the runner -- */
 let run = store.get("run", null);
@@ -776,7 +857,8 @@ function renderToday(){
       <div class="card"><h4>Week at a glance</h4><ul>${DATA.week.map((w,i)=>
         `<li${i===viewDay?' style="color:var(--ink);font-weight:500"':""}>${w.day.slice(0,3)} &mdash; ${esc(w.focus)}</li>`).join("")}</ul></div>
     </div>
-  </div>`;
+  </div>
+  ${renderHistory()}`;
 }
 document.getElementById("p-today").addEventListener("click", e => {
   const rb = e.target.closest("button[data-run]");
