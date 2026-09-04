@@ -289,6 +289,9 @@ tr.is-today td{background:var(--brass-soft)}
 .scoreline{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13px;color:var(--muted);
   margin-top:10px;padding-top:10px;border-top:1px solid var(--rule)}
 .scoreline b{font-family:"IBM Plex Mono",monospace;color:var(--ink);font-weight:500}
+.scorereset{margin-left:auto;background:none;border:none;color:var(--muted);text-decoration:underline;
+  cursor:pointer;font:inherit;font-size:13px;padding:0}
+.scorereset:hover{color:var(--ink)}
 .verdict{font-size:14px;font-weight:600;margin-top:10px;min-height:21px}
 .verdict.ok{color:var(--ok)} .verdict.no{color:var(--brass)}
 .kschip{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:10px 14px;
@@ -1148,10 +1151,11 @@ let drillTab = store.get("drilltab","ear");
 const DRILL_TABS = [["ear","Ear training"],["sight","Sight-reading"],["ks","Key signatures"],
                     ["cof","Circle of fifths"],["roul","Scale roulette"]];
 let ear = {mode: store.get("earmode","intervals"), diff: store.get("eardiff","core"),
-           dir: store.get("eardir","melodic"), q: null, answered: false, right: 0, n: 0};
+           dir: store.get("eardir","melodic"), q: null, answered: false,
+           right: store.get("earright",0), n: store.get("earn",0)};
 let sight = {level: store.get("srlevel",1), item: null, seen: store.get("srseen",0)};
-let ksq = {q: null, answered: false, right: 0, n: 0};
-let cof = {q: null, answered: false, right: 0, n: 0};
+let ksq = {q: null, answered: false, right: store.get("ksright",0), n: store.get("ksn",0)};
+let cof = {q: null, answered: false, right: store.get("cofright",0), n: store.get("cofn",0)};
 let roul = null;
 
 const CORE_INT = ["Minor 3rd","Major 3rd","Perfect 4th","Perfect 5th","Major 6th","Octave"];
@@ -1276,7 +1280,8 @@ function renderDrills(){
       <div class="verdict ${ear.answered ? (ear.picked===ear.q.answer?"ok":"no") : ""}">${
         ear.answered ? (ear.picked===ear.q.answer ? "Correct." : `It was a ${ear.q.answer.toLowerCase()}. Play it again and listen for the difference.`) : "&nbsp;"}</div>
       <div class="scoreline"><span>Score <b>${ear.right}/${ear.n}</b></span>
-        <span>${ear.n?Math.round(100*ear.right/ear.n):0}% correct</span></div>
+        <span>${ear.n?Math.round(100*ear.right/ear.n):0}% correct</span>
+        ${ear.n?`<button type="button" class="scorereset" data-ear="reset">Reset score</button>`:""}</div>
     </div>`,
   sight: () => {
     const it = sight.item;
@@ -1314,7 +1319,8 @@ function renderDrills(){
       <div class="verdict ${ksq.answered ? (ksq.picked===ksq.q.item[1]?"ok":"no") : ""}">${
         ksq.answered ? `${ksq.q.item[4] === "none" ? "No sharps or flats" : ksq.q.item[4]} \u2014 ${ksq.q.item[1]}, or its relative ${ksq.q.item[2]}.` : "&nbsp;"}</div>
       <div class="rctl"><button type="button" data-ksa="__next">New key signature</button></div>
-      <div class="scoreline"><span>Score <b>${ksq.right}/${ksq.n}</b></span></div>
+      <div class="scoreline"><span>Score <b>${ksq.right}/${ksq.n}</b></span>
+        ${ksq.n?`<button type="button" class="scorereset" data-ksa="__reset">Reset score</button>`:""}</div>
     </div>`,
   cof: () => `
     <div class="drill">
@@ -1329,7 +1335,8 @@ function renderDrills(){
       <div class="verdict ${cof.answered ? (cof.picked===cof.q.answer?"ok":"no") : ""}">${
         cof.answered ? (cof.picked===cof.q.answer ? "Correct." : `The answer is ${esc(cof.q.answer)}.`) : "&nbsp;"}</div>
       <div class="rctl"><button type="button" data-cofa="__next">Next question</button></div>
-      <div class="scoreline"><span>Score <b>${cof.right}/${cof.n}</b></span></div>
+      <div class="scoreline"><span>Score <b>${cof.right}/${cof.n}</b></span>
+        ${cof.n?`<button type="button" class="scorereset" data-cofa="__reset">Reset score</button>`:""}</div>
     </div>`,
   roul: () => `
     <div class="drill">
@@ -1366,12 +1373,14 @@ document.getElementById("p-drills").addEventListener("click", e => {
     const v = eb.dataset.ear;
     if (v==="play") { playEar(); return; }
     if (v==="next") { newEar(); renderDrills(); setTimeout(playEar,120); return; }
+    if (v==="reset") { ear.right=0; ear.n=0; store.set("earright",0); store.set("earn",0); renderDrills(); return; }
     const [k,val] = v.split(":"); ear[k]=val; store.set("ear"+k, val); newEar(); renderDrills(); return;
   }
   const ab = e.target.closest("button[data-ans]");
   if (ab && !ear.answered){
     ear.picked = ab.dataset.ans; ear.answered = true; ear.n++;
     if (ear.picked===ear.q.answer) ear.right++;
+    store.set("earn", ear.n); store.set("earright", ear.right);
     renderDrills(); return;
   }
   const sb = e.target.closest("button[data-sr]");
@@ -1386,15 +1395,19 @@ document.getElementById("p-drills").addEventListener("click", e => {
   const kb = e.target.closest("button[data-ksa]");
   if (kb){
     if (kb.dataset.ksa==="__next"){ newKs(); renderDrills(); return; }
+    if (kb.dataset.ksa==="__reset"){ ksq.right=0; ksq.n=0; store.set("ksright",0); store.set("ksn",0); renderDrills(); return; }
     if (!ksq.answered){ ksq.picked = kb.dataset.ksa; ksq.answered = true; ksq.n++;
-      if (ksq.picked===ksq.q.item[1]) ksq.right++; renderDrills(); }
+      if (ksq.picked===ksq.q.item[1]) ksq.right++;
+      store.set("ksn", ksq.n); store.set("ksright", ksq.right); renderDrills(); }
     return;
   }
   const cb = e.target.closest("button[data-cofa]");
   if (cb){
     if (cb.dataset.cofa==="__next"){ newCof(); renderDrills(); return; }
+    if (cb.dataset.cofa==="__reset"){ cof.right=0; cof.n=0; store.set("cofright",0); store.set("cofn",0); renderDrills(); return; }
     if (!cof.answered){ cof.picked = cb.dataset.cofa; cof.answered = true; cof.n++;
-      if (cof.picked===cof.q.answer) cof.right++; renderDrills(); }
+      if (cof.picked===cof.q.answer) cof.right++;
+      store.set("cofn", cof.n); store.set("cofright", cof.right); renderDrills(); }
     return;
   }
   const rb = e.target.closest("button[data-roul]");
