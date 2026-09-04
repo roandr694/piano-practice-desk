@@ -347,8 +347,13 @@ tr.is-today td{background:var(--brass-soft)}
 .pd-badge{color:var(--ok);border:1px solid var(--ok)}
 .cr-badge{color:var(--warn);border:1px solid var(--warn)}
 .sourcerow a{color:var(--brass)}
-.study{transition:background-color .4s ease}
-.study.flash{background-color:var(--brass-soft);border-radius:8px}
+.study,.piece{transition:background-color .4s ease}
+.study.flash,.piece.flash{background-color:var(--brass-soft);border-radius:8px}
+.usedby{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:12px;color:var(--muted);
+  margin-top:10px}
+.usedby button{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--sunk);
+  border:1px solid var(--rule);border-radius:5px;padding:2px 7px;cursor:pointer;color:var(--ink)}
+.usedby button:hover{border-color:var(--brass);color:var(--brass)}
 
 .myrep{background:var(--sunk);border:1px solid var(--rule);border-radius:9px;padding:15px 16px;margin-bottom:22px}
 .myrephd{margin-bottom:11px}
@@ -914,6 +919,7 @@ function renderScales(){
     `<button type="button" data-key="${i}" aria-pressed="${i===scaleKey}">
       <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
   ${plate(plateId, title, meta)}
+  ${usedByHTML(piecesForScale(isMaj?"major":"minor", k.id))}
   <div class="rctl playrow" style="margin:-6px 0 16px">
     <button type="button" class="primary" data-scaleplay="1">▶ Play this scale</button>
   </div>
@@ -946,7 +952,9 @@ document.getElementById("p-scales").addEventListener("click", e => {
   const k = e.target.closest("button[data-key]");
   if (k){ scaleKey = +k.dataset.key; renderScales(); return; }
   const p = e.target.closest("button[data-scaleplay]");
-  if (p) playScaleAudio();
+  if (p){ playScaleAudio(); return; }
+  const gp = e.target.closest("button[data-gopiece]");
+  if (gp) goToPiece(gp.dataset.gopiece);
 });
 
 /* ---------- ARPEGGIOS ---------- */
@@ -1024,13 +1032,16 @@ function renderStudies(){
     <p class="why"><b>Purpose:</b> ${esc(s.why)}</p>
     <p class="how"><b>How:</b> ${esc(s.how)}</p>
     ${plate(s.plate, "", "")}
+    ${usedByHTML(piecesForStudy(s.code))}
   </div>`).join("") : `<p class="note">No studies match that combination &mdash; try a wider level range.</p>`}`;
 }
 document.getElementById("p-studies").addEventListener("click", e => {
   const b = e.target.closest("button[data-fam]");
   if (b){ fam = b.dataset.fam; renderStudies(); window.scrollTo({top:0,behavior:"instant"}); return; }
   const l = e.target.closest("button[data-lvl]");
-  if (l){ lvlF = l.dataset.lvl; renderStudies(); window.scrollTo({top:0,behavior:"instant"}); }
+  if (l){ lvlF = l.dataset.lvl; renderStudies(); window.scrollTo({top:0,behavior:"instant"}); return; }
+  const gp = e.target.closest("button[data-gopiece]");
+  if (gp) goToPiece(gp.dataset.gopiece);
 });
 
 /* ---------- THEORY ---------- */
@@ -1634,6 +1645,34 @@ const REPERTOIRE = [
     ]}
 ];
 
+/* reverse links: which repertoire pieces build on a given study or scale */
+const pieceSlug = (composer, title) => (composer+"-"+title).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+let _flatPieces = null;
+function allPieces(){
+  if (!_flatPieces) _flatPieces = REPERTOIRE.flatMap(era =>
+    era.composers.flatMap(c => c.pieces.map(p => ({...p, composer:c.name, slug:pieceSlug(c.name,p.title)}))));
+  return _flatPieces;
+}
+function piecesForStudy(code){ return allPieces().filter(p => p.studies.includes(code)); }
+function piecesForScale(kind, id){ return allPieces().filter(p => p.scaleKey && p.scaleKey.kind===kind && p.scaleKey.id===id); }
+function usedByHTML(pieces){
+  if (!pieces.length) return "";
+  return `<div class="usedby"><span>Used in</span>${pieces.map(p=>
+    `<button type="button" data-gopiece="${p.slug}">${esc(p.title)}</button>`).join("")}</div>`;
+}
+function goToPiece(slug){
+  const p = allPieces().find(x=>x.slug===slug); if (!p) return;
+  repLevel = "All"; renderRepertoire();
+  showTab("repertoire");
+  setTimeout(() => {
+    const el = document.getElementById("piece-"+slug);
+    if (!el) return;
+    el.scrollIntoView({behavior:"smooth", block:"start"});
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 1600);
+  });
+}
+
 /* -- my repertoire: the pieces actually being practised, distinct from the catalog above -- */
 function myRep(){ return store.get("myrep", []); }
 function setMyRep(list){ store.set("myrep", list); }
@@ -1686,7 +1725,7 @@ function renderRepertoire(){
       <div class="composer">
         <h3>${esc(c.name)} <span class="life">${esc(c.life)}</span></h3>
         <div class="pieces">${pieces.map(p => `
-          <div class="piece">
+          <div class="piece" id="piece-${pieceSlug(c.name,p.title)}">
             <div class="phd"><b>${esc(p.title)}</b>
               <span class="cat">${p.cat ? esc(p.cat)+" &middot; " : ""}${esc(p.year)}</span>
               <span class="lvlpill">Level ${p.level}</span></div>
