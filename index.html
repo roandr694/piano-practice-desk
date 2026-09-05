@@ -292,6 +292,12 @@ tr.is-today td{background:var(--brass-soft)}
 .scorereset{margin-left:auto;background:none;border:none;color:var(--muted);text-decoration:underline;
   cursor:pointer;font:inherit;font-size:13px;padding:0}
 .scorereset:hover{color:var(--ink)}
+.curbadge{display:inline-block;background:var(--felt);color:var(--on-felt);font-size:11px;
+  font-weight:600;padding:3px 9px;border-radius:20px;font-family:"IBM Plex Mono",monospace;
+  white-space:nowrap}
+.setmonth{background:none;border:1px solid var(--rule);border-radius:6px;color:var(--muted);
+  cursor:pointer;font:inherit;font-size:12px;padding:4px 9px;white-space:nowrap}
+.setmonth:hover{border-color:var(--felt);color:var(--felt)}
 .verdict{font-size:14px;font-weight:600;margin-top:10px;min-height:21px}
 .verdict.ok{color:var(--ok)} .verdict.no{color:var(--brass)}
 .kschip{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:10px 14px;
@@ -782,6 +788,7 @@ function renderToday(){
   const done = store.get(todayKey(viewDay), []);
   const studies = d.studies.map(c => DATA.studies.find(s=>s.code===c)).filter(Boolean);
   const st = stats();
+  const yr = curYearRow();
   let runnerHTML = "";
   if (run){
     const bl = blocksOf(run.r), b = bl[run.i], rem = remaining();
@@ -857,6 +864,21 @@ function renderToday(){
         </div>` : `<p style="margin:0;font-size:13.5px;color:var(--muted)">No sessions logged yet —
         start today's session below and your streak starts here.</p>`}
       </div>
+      <div class="card"><h4>This month</h4>
+        ${yr ? `
+          <p style="margin:0 0 4px;font-size:14px"><b>Month ${yr[0]} of 18</b></p>
+          <p style="margin:0 0 8px;font-size:13.5px">${esc(yr[1])}</p>
+          <p style="margin:0 0 10px;font-size:12.5px;color:var(--muted)">${esc(yr[2])}</p>
+          <div style="display:flex;flex-wrap:wrap;gap:4px 16px">
+            <button type="button" class="scorereset" style="margin-left:0" data-gomonth>View in the plan &rarr;</button>
+            ${yr[0]<18 ? `<button type="button" class="scorereset" style="margin-left:0" data-nextmonth>Mark month done &rarr;</button>` : ""}
+          </div>`
+        : `
+          <p style="margin:0 0 8px;font-size:13.5px;color:var(--muted)">Track where you are in the
+          eighteen-month curriculum (see The plan) so this tells you the actual keys due this month,
+          instead of you checking by hand.</p>
+          <button type="button" class="scorereset" style="margin-left:0" data-startmonth>Start at Month 1</button>`}
+      </div>
       <div class="card"><h4>Scale focus</h4><p style="margin:0;font-size:14px">${esc(d.scales)}</p></div>
       <div class="card"><h4>The three-times rule</h4>
         <p style="margin:0;font-size:13.5px;color:var(--muted)">Move on only when you can play a
@@ -883,7 +905,10 @@ document.getElementById("p-today").addEventListener("click", e => {
   const dbtn = e.target.closest("button[data-day]");
   if (dbtn){ viewDay = +dbtn.dataset.day; renderToday(); return; }
   const rbtn = e.target.closest("button[data-r]");
-  if (rbtn){ routine = rbtn.dataset.r; store.set("routine", routine); renderToday(); }
+  if (rbtn){ routine = rbtn.dataset.r; store.set("routine", routine); renderToday(); return; }
+  if (e.target.closest("[data-startmonth]")){ setCurMonth(1); return; }
+  if (e.target.closest("[data-nextmonth]")){ setCurMonth(curMonth+1); return; }
+  if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
 });
 document.getElementById("p-today").addEventListener("change", e => {
   const cb = e.target.closest("input[type=checkbox][data-i]"); if (!cb) return;
@@ -1430,6 +1455,18 @@ document.getElementById("p-drills").addEventListener("click", e => {
 
 /* ---------- PLAN ---------- */
 let planLen = store.get("planlen","45");
+let curMonth = store.get("curmonth", 0);
+function curYearRow(){ return DATA.year.find(y=>y[0]===curMonth) || null; }
+function setCurMonth(n){ curMonth = n; store.set("curmonth", n); renderPlan(); renderToday(); }
+function goToMonth(){
+  showTab("plan");
+  window.scrollTo({top:0, behavior:"instant"});
+  setTimeout(() => {
+    const el = document.getElementById("year-"+curMonth);
+    if (!el) return;
+    el.scrollIntoView({behavior:"smooth", block:"center"});
+  });
+}
 function renderPlan(){
   const lv=["Level I","Level II","Level III","Advanced"];
   const bl = DATA.routines[planLen];
@@ -1479,10 +1516,15 @@ function renderPlan(){
   of difficulty. Months 1&ndash;12 take you through every key at Levels I&ndash;III; months 13&ndash;18
   are Level IV &mdash; four octaves at speed, double thirds, octaves and polyrhythm. If a month goes
   badly, repeat it: the curriculum is a sequence, not a schedule.</p>
-  <div class="tw"><table><thead><tr><th class="n">Month</th><th>Keys</th><th>Technical theme</th><th>Repertoire target</th></tr></thead>
-  <tbody>${DATA.year.map(y=>`<tr${y[0]>12?' style="background:var(--brass-soft)"':""}>
+  <div class="tw"><table><thead><tr><th class="n">Month</th><th>Keys</th><th>Technical theme</th><th>Repertoire target</th>
+    <th class="n" style="width:120px">Current</th></tr></thead>
+  <tbody>${DATA.year.map(y=>{ const isCur = y[0]===curMonth;
+    return `<tr id="year-${y[0]}"${y[0]>12?' style="background:var(--brass-soft)"':""}>
     <td class="n">${y[0]}</td><td><b>${esc(y[1])}</b></td>
-    <td>${esc(y[2])}</td><td>${esc(y[3])}</td></tr>`).join("")}</tbody></table></div>
+    <td>${esc(y[2])}</td><td>${esc(y[3])}</td>
+    <td class="n">${isCur ? '<span class="curbadge">You are here</span>'
+      : `<button type="button" class="setmonth" data-setmonth="${y[0]}">Set current</button>`}</td></tr>`;
+  }).join("")}</tbody></table></div>
   <h2>Metronome targets</h2>
   <p class="note">In sixteenth notes per quarter-note beat &mdash; the standard for examination scales.
   Expect roughly 8&ndash;12 BPM of progress per week on a given scale, and expect it to stall
@@ -1515,6 +1557,9 @@ function renderPlan(){
   });
   document.querySelectorAll("#p-plan button[data-pl]").forEach(b=>{
     b.onclick = () => { planLen = b.dataset.pl; store.set("planlen", planLen); renderPlan(); };
+  });
+  document.querySelectorAll("#p-plan button[data-setmonth]").forEach(b=>{
+    b.onclick = () => setCurMonth(+b.dataset.setmonth);
   });
 }
 
