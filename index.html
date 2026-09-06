@@ -789,6 +789,14 @@ function renderToday(){
   const studies = d.studies.map(c => DATA.studies.find(s=>s.code===c)).filter(Boolean);
   const st = stats();
   const yr = curYearRow();
+  const mk = parseMonthKeys(yr);
+  let scaleText = d.scales;
+  if (mk){
+    scaleText = scaleText
+      .replace("this month's keys", mk.majors.map(m=>m.name.replace(" major","")).join(", "))
+      .replace("same keys", mk.minors.map(m=>m.name.replace(" minor","")).join(", "))
+      .replace("the month's keys", `this month's keys (${yr[1]})`);
+  }
   let runnerHTML = "";
   if (run){
     const bl = blocksOf(run.r), b = bl[run.i], rem = remaining();
@@ -879,7 +887,7 @@ function renderToday(){
           instead of you checking by hand.</p>
           <button type="button" class="scorereset" style="margin-left:0" data-startmonth>Start at Month 1</button>`}
       </div>
-      <div class="card"><h4>Scale focus</h4><p style="margin:0;font-size:14px">${esc(d.scales)}</p></div>
+      <div class="card"><h4>Scale focus</h4><p style="margin:0;font-size:14px">${esc(scaleText)}</p></div>
       <div class="card"><h4>The three-times rule</h4>
         <p style="margin:0;font-size:13.5px;color:var(--muted)">Move on only when you can play a
         passage correctly three consecutive times at the current tempo. Break the run and the count
@@ -932,6 +940,9 @@ function renderScales(){
       : scaleForm==="melodic" ? `${k.sig} \u00b7 ascending raises ${k.raised67} \u00b7 natural on the way down`
       : `${k.sig} \u00b7 same notes as ${k.rel}`);
   const title = isMaj ? k.name : k.name.replace(" minor", " " + scaleForm + " minor");
+  const yr = curYearRow();
+  const mk = parseMonthKeys(yr);
+  const isCurMonthKey = mk && (isMaj ? mk.majors : mk.minors).some(m=>m.id===k.id);
   document.getElementById("p-scales").innerHTML = `
   <div class="phead">
     <div class="eyebrow">Part II</div><h1>Scales</h1>
@@ -943,6 +954,10 @@ function renderScales(){
   <div class="keygrid">${list.map((x,i)=>
     `<button type="button" data-key="${i}" aria-pressed="${i===scaleKey}">
       <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
+  ${isCurMonthKey ? `<div style="margin:0 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span class="curbadge">Month ${yr[0]} curriculum key</span>
+    <button type="button" class="scorereset" style="margin-left:0" data-gomonth>View in the plan &rarr;</button>
+  </div>` : ""}
   ${plate(plateId, title, meta)}
   ${usedByHTML(piecesForScale(isMaj?"major":"minor", k.id))}
   <div class="rctl playrow" style="margin:-6px 0 16px">
@@ -978,6 +993,7 @@ document.getElementById("p-scales").addEventListener("click", e => {
   if (k){ scaleKey = +k.dataset.key; renderScales(); return; }
   const p = e.target.closest("button[data-scaleplay]");
   if (p){ playScaleAudio(); return; }
+  if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
   const gp = e.target.closest("button[data-gopiece]");
   if (gp) goToPiece(gp.dataset.gopiece);
 });
@@ -1457,7 +1473,21 @@ document.getElementById("p-drills").addEventListener("click", e => {
 let planLen = store.get("planlen","45");
 let curMonth = store.get("curmonth", 0);
 function curYearRow(){ return DATA.year.find(y=>y[0]===curMonth) || null; }
-function setCurMonth(n){ curMonth = n; store.set("curmonth", n); renderPlan(); renderToday(); }
+function setCurMonth(n){ curMonth = n; store.set("curmonth", n); renderPlan(); renderToday(); renderScales(); }
+/* Only months 1-6 name specific keys ("C, G major · A, E minor"); months 7-18 use review
+   language ("Review all 12 majors", "All 24 keys, four octaves"...) that doesn't map to a
+   short key list, so this returns null for those rather than guessing. */
+function parseMonthKeys(yr){
+  if (!yr) return null;
+  const parts = yr[1].split(" · ");
+  if (parts.length !== 2) return null;
+  const [majPart, minPart] = parts;
+  if (!majPart.endsWith(" major") || !minPart.endsWith(" minor")) return null;
+  const majors = majPart.slice(0,-6).split(", ").map(s => DATA.majors.find(m=>m.name===s+" major"));
+  const minors = minPart.slice(0,-6).split(", ").map(s => DATA.minors.find(m=>m.name===s+" minor"));
+  if (majors.some(m=>!m) || minors.some(m=>!m)) return null;
+  return { majors, minors };
+}
 function goToMonth(){
   showTab("plan");
   window.scrollTo({top:0, behavior:"instant"});
