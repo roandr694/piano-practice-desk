@@ -191,14 +191,26 @@ tr.is-today td{background:var(--brass-soft)}
 .chips button{background:var(--surface);border:1px solid var(--rule);border-radius:999px;
   padding:6px 13px;font-size:13px;cursor:pointer;color:var(--muted)}
 .chips button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
-.study{margin-bottom:26px}
-.study .hd{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin-bottom:6px}
+.studytools{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:2px 0 16px;
+  font-size:13px;color:var(--faint)}
+.studytools button{background:none;border:none;color:var(--muted);text-decoration:underline;
+  cursor:pointer;font:inherit;font-size:13px;padding:0}
+.studytools button:hover{color:var(--ink)}
+.study{border-bottom:1px solid var(--rule);padding:16px 0}
+.study:first-of-type{padding-top:0}
+.study summary{display:flex;gap:10px;align-items:flex-start;cursor:pointer;list-style:none}
+.study summary::-webkit-details-marker{display:none}
+.study summary::before{content:"\25B8";color:var(--brass);font-size:12px;line-height:1.7;flex:0 0 12px}
+.study[open] summary::before{content:"\25BE"}
+.study .sumtext{min-width:0;flex:1 1 auto}
+.study .hd{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin-bottom:5px}
 .study .code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--brass);
   border:1px solid var(--brass);border-radius:4px;padding:1px 6px}
 .study .t{font-family:"Instrument Serif",Georgia,serif;font-size:22px}
 .study .lv{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
-.study .why{margin:0 0 3px;max-width:70ch}
-.study .how{margin:0 0 11px;color:var(--muted);font-size:13.5px;max-width:70ch}
+.study .why{margin:0;max-width:70ch}
+.studybody{padding:12px 0 2px 22px}
+.studybody .how{margin:0 0 11px;color:var(--muted);font-size:13.5px;max-width:70ch}
 .study .how b,.study .why b{font-weight:600;color:var(--ink)}
 
 /* ---------- diagrams ---------- */
@@ -418,7 +430,9 @@ tr.is-today td{background:var(--brass-soft)}
   .today{grid-template-columns:1fr}
   .block{box-shadow:none;border:1px solid #999;break-inside:avoid;background:#fff}
   .block.done{opacity:1}
-  .study{break-inside:avoid}
+  .study{break-inside:avoid;border-bottom:1px solid #999}
+  .study:not([open])>*{display:block!important}
+  .studytools,.studychips[aria-label]{display:none!important}
   .plate{break-inside:avoid}
   a[href]:after{content:""}
 }
@@ -1067,20 +1081,38 @@ function renderStudies(){
     `<button type="button" data-fam="${f}" aria-pressed="${f===fam}">${f}</button>`).join("")}</div>
   <div class="mini" style="margin-bottom:20px"><span>Level</span>${lvls.map(l=>
     `<button type="button" data-lvl="${l}" aria-pressed="${l===lvlF}">${l}</button>`).join("")}</div>
-  ${list.length ? list.map(s=>`<div class="study" id="study-${s.code}">
-    <div class="hd"><span class="code">${s.code}</span><span class="t">${esc(s.t)}</span>
-      <span class="lv">${s.fam} &middot; Level ${s.lvl}</span></div>
-    <p class="why"><b>Purpose:</b> ${esc(s.why)}</p>
-    <p class="how"><b>How:</b> ${esc(s.how)}</p>
-    ${plate(s.plate, "", "")}
-    ${usedByHTML(piecesForStudy(s.code))}
-  </div>`).join("") : `<p class="note">No studies match that combination &mdash; try a wider level range.</p>`}`;
+  ${list.length ? `
+  <div class="studychips" aria-label="Jump to a study">${list.map(s=>
+    `<button type="button" data-jump="${s.code}">${s.code}</button>`).join("")}</div>
+  <div class="studytools">
+    <button type="button" data-studyop="expand">Expand all</button>
+    <button type="button" data-studyop="collapse">Collapse all</button>
+    <span>${list.length} ${list.length===1?"study":"studies"} &mdash; purpose shown below, notation on expand</span>
+  </div>
+  ${list.map(s=>`<details class="study" id="study-${s.code}">
+    <summary><span class="sumtext">
+      <span class="hd"><span class="code">${s.code}</span><span class="t">${esc(s.t)}</span>
+        <span class="lv">${s.fam} &middot; Level ${s.lvl}</span></span>
+      <p class="why"><b>Purpose:</b> ${esc(s.why)}</p>
+    </span></summary>
+    <div class="studybody">
+      <p class="how"><b>How:</b> ${esc(s.how)}</p>
+      ${plate(s.plate, "", "")}
+      ${usedByHTML(piecesForStudy(s.code))}
+    </div>
+  </details>`).join("")}`
+  : `<p class="note">No studies match that combination &mdash; try a wider level range.</p>`}`;
 }
 document.getElementById("p-studies").addEventListener("click", e => {
   const b = e.target.closest("button[data-fam]");
   if (b){ fam = b.dataset.fam; renderStudies(); window.scrollTo({top:0,behavior:"instant"}); return; }
   const l = e.target.closest("button[data-lvl]");
   if (l){ lvlF = l.dataset.lvl; renderStudies(); window.scrollTo({top:0,behavior:"instant"}); return; }
+  const j = e.target.closest("button[data-jump]");
+  if (j){ openStudy(j.dataset.jump); return; }
+  const op = e.target.closest("button[data-studyop]");
+  if (op){ document.querySelectorAll("#p-studies details.study")
+    .forEach(d => d.open = op.dataset.studyop==="expand"); return; }
   const gp = e.target.closest("button[data-gopiece]");
   if (gp) goToPiece(gp.dataset.gopiece);
 });
@@ -1595,16 +1627,18 @@ function renderPlan(){
 
 /* ---------- REPERTOIRE ---------- */
 function imslpSearch(q){ return "https://imslp.org/index.php?title=Special:Search&search=" + encodeURIComponent(q); }
+function openStudy(code){
+  const el = document.getElementById("study-"+code);
+  if (!el) return;
+  el.open = true;
+  el.scrollIntoView({behavior:"smooth", block:"start"});
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 1600);
+}
 function goToStudy(code){
   fam = "All"; lvlF = "All"; renderStudies();
   showTab("studies");
-  setTimeout(() => {
-    const el = document.getElementById("study-"+code);
-    if (!el) return;
-    el.scrollIntoView({behavior:"smooth", block:"start"});
-    el.classList.add("flash");
-    setTimeout(() => el.classList.remove("flash"), 1600);
-  });
+  setTimeout(() => openStudy(code));
 }
 function goToScale(kind, id){
   const list = kind==="major" ? DATA.majors : DATA.minors;
