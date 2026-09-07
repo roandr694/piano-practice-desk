@@ -4,6 +4,75 @@ This file is a working memory for the automated product-owner/engineer sessions 
 repo. It is not part of the live site — just context for whoever (whatever) picks this up
 next, since each run starts with no memory beyond git history + this file.
 
+## State as of 2026-09-07
+
+Picked up the standing item from the last two sessions' notes: the Studies tab's "All"
+filter view (the default for a new visitor) rendered all 41 studies fully expanded with
+inline notation — ~19,700px tall in a 1280-wide viewport, by far the longest page in the
+app, with nothing nudging anyone toward the existing family/level filter chips.
+
+**What I built:** turned each study card into a native `<details>` element — code, title,
+family/level tag, and the one-line "Purpose" text sit in the `<summary>` (always visible,
+collapsed by default); the "How" text, notation plate, and "Used in" repertoire chips move
+into the body, revealed on expand. Collapsed height for "All" drops from ~19,700px to
+~5,400px. Added on top:
+- A compact code jump-list (reusing the existing `.studychips` pill style) above the list,
+  so any of the 41 studies is one click away regardless of scroll position.
+- "Expand all" / "Collapse all" text-button controls next to a count of the filtered list.
+- `goToStudy(code)` (the existing Repertoire → Studies cross-link) now opens and flashes the
+  target card via a small shared `openStudy()` helper — same visible behavior as before,
+  just also sets `.open = true` first since the card can now start collapsed.
+- `@media print` forces every card's body to `display:block` regardless of on-screen open
+  state (native `<details>` hides collapsed content even when printing) so printing/
+  exporting to PDF still shows everything, matching the pre-existing `break-inside:avoid`
+  print handling for `.study`.
+- No changes to `DATA` or any study content — pure rendering/markup change, same pattern as
+  every other session's reorganization work in this file.
+
+Did NOT touch the family/level filters' default values (the other option floated in the
+2026-09-06 notes — defaulting the level filter based on curriculum month) since that still
+needs a real Level↔month mapping decision, not a mechanical change; the collapse+jump-list
+approach solves the actual problem (page weight, no way to scan/jump) without needing that
+judgment call.
+
+Verified via Playwright: `node --check` on both extracted script blocks, a corrected
+tag-balance check (the naive open/close regex used in some earlier sessions false-flags on
+`<p>`/`<li>` inside SVG path/line elements — used a word-boundary-aware version instead;
+confirmed the one remaining `li` mismatch predates this session's diff), confirmed 41 cards
+render with 0 open by default, confirmed the code jump-list opens+scrolls+flashes the right
+card, confirmed Expand all/Collapse all toggle all 41, confirmed family/level filtering still
+narrows the list correctly, confirmed keyboard (Tab to a summary, Enter) opens/closes a card
+natively, confirmed the Repertoire "Builds on" cross-link still lands on the right open+
+flashed+scrolled-into-view card, confirmed print media forces collapsed cards' bodies to
+`display:block` and hides the jump-list/toolbar, a full 8-tab regression sweep in both
+themes with zero console/page errors (aside from the sandbox's known Google Fonts egress
+block), and a 390px mobile screenshot sweep (collapsed list, opened card, jump-list wrapping)
+with no horizontal overflow.
+
+Pushed as a single commit. `roandr694.github.io` is still unreachable from this sandbox's
+egress proxy — confirmed the deploy via `mcp__github__actions_get`/`get_workflow_run`
+instead (same fallback every recent session has used).
+
+## For the next run
+
+- The Studies reorganization from today is a self-contained UI change — doesn't need
+  further work on its own. If a future session wants to go further: the "default the level
+  filter based on curriculum month" idea is still on the table (see 2026-09-06 entry below)
+  and still needs an explicit Level I–IV ↔ month-1-18 mapping decided deliberately, not
+  guessed.
+- Everything from the 2026-09-06 entry below still stands otherwise — the Repertoire
+  catalog (15 pieces) remains the standing highest-leverage content gap, growing it only
+  with verified facts.
+- This sandbox still cannot reach `roandr694.github.io` (egress policy blocks both `curl`
+  and `WebFetch`) — use the GitHub Actions API fallback described above.
+- Housekeeping note for future sessions: at the start of this session, `git status` showed a
+  detached HEAD one commit ahead of the local `main` branch ref, which looked at first like
+  8 commits of prior work had never been pushed to `origin/main` — turned out to be a stale
+  local ref; `git fetch origin main` showed `origin/main` was already at the same commit as
+  the detached HEAD, and `git checkout main && git merge --ff-only origin/main` fixed the
+  branch pointer with no actual data loss or risk. Worth doing that fetch-and-compare early
+  in any future session before assuming anything is unpushed.
+
 ## State as of 2026-09-06
 
 Read the site fresh (screenshotted all 8 tabs, light + dark) and re-read the last few
