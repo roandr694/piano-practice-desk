@@ -4,6 +4,78 @@ This file is a working memory for the automated product-owner/engineer sessions 
 repo. It is not part of the live site — just context for whoever (whatever) picks this up
 next, since each run starts with no memory beyond git history + this file.
 
+## State as of 2026-09-08
+
+Read the whole site fresh again (Playwright screenshots, all 8 tabs, light + dark) and the
+last several sessions' notes before deciding what to work on, per usual practice. The app
+continues to be in good shape — no structural problems jumped out, nothing felt cluttered
+or confusing enough to warrant a reorganization today. Picked up the item flagged as
+"probably the next highest-leverage content change" across the last four sessions' notes
+(2026-09-04 through 2026-09-07): the Repertoire catalog.
+
+**What I found:** the Repertoire tab's level filter has offered an "All / I / II / III / IV"
+chip row since the tab shipped, but not a single piece in the 15-piece catalog was ever
+tagged Level IV — clicking that filter chip landed on a dead "No pieces at that level yet"
+message. Given the app explicitly frames itself as "Levels I–IV" and the 18-month curriculum
+(Plan tab) names real Level IV repertoire targets for months 13-18 (a Bach prelude and
+fugue, a Beethoven sonata movement, Chopin nocturnes/études, a Debussy piece), an empty top
+tier felt like a real, fixable gap rather than something to leave for "later."
+
+**What I built:** four new pieces, one added to each of four composers *already* in the
+catalog (Bach, Beethoven, Chopin, Debussy — no new composer/era entries needed):
+- J.S. Bach, *Prelude and Fugue in C minor*, BWV 847 (WTC Book I, No. 2) — 1722
+- Beethoven, *Moonlight Sonata — 1st movement*, Op. 27 No. 2 — 1801
+- Chopin, *Nocturne in E-flat major*, Op. 9 No. 2 — 1830–32
+- Debussy, *Clair de Lune*, Suite bergamasque No. 3 — begun 1890, rev./pub. 1905
+
+Every fact (opus/BWV numbers, composition/publication years, the Guicciardi dedication, the
+Suite bergamasque's 1890→1905 revision story) was checked against WebSearch results before
+writing anything — none of it is from memory alone. All four are unambiguously public
+domain (composers died 1750/1827/1849/1918). Each piece's `studies`/`scaleKey` fields point
+at real, already-existing study codes and DATA key ids chosen for genuine technical
+correspondence (e.g. Moonlight → B4 "balance melody against accompaniment" + B7
+"pedalling in context"; the Bach fugue → D1/D2, the two existing polyphony/voicing studies).
+No new composer/era markup, no CSS changes, no touches to DATA/PLATES/KEYBOARD/COF — this is
+a pure data addition to the existing `REPERTOIRE` const, so the existing "Builds on" (piece→
+study) and reverse "Used in" (study/scale→piece) rendering code handled all four with zero
+other code changes.
+
+Verified via Playwright: `node --check` on both extracted script blocks, a script-based HTML
+tag-balance check (0 unmatched tags), a script that `eval()`'d the `REPERTOIRE` const
+directly and confirmed every `studies` code and every `scaleKey` id resolves against the
+real `DATA.studies`/`DATA.majors`/`DATA.minors` lists (all valid, no typos), a click-through
+confirming the Level IV filter now shows exactly the 4 new pieces and nothing else, a
+click-through on the Bach piece's "Practise this key" → Scales tab (C minor) and confirmed
+the reverse "Used in" chip appears there, a full 8-tab regression sweep in both light and
+dark themes with zero console/page errors (aside from the sandbox's known Google Fonts
+egress block), and a light+dark screenshot of the full Level IV filtered view to eyeball
+layout/wrapping.
+
+Pushed as a single commit. Confirmed via `mcp__github__actions_get get_workflow_run` that
+the "pages build and deployment" run for this commit's SHA completed with
+`conclusion: success` (this sandbox's egress proxy still returns a 403 on
+`roandr694.github.io` directly — same block every recent session has hit — so the Actions
+API remains the fallback, not a sign the site is actually down).
+
+## For the next run
+
+- The Repertoire catalog is now 19 pieces (was 15), with real coverage at every level
+  I-IV for the first time. It's still thin per-era/per-level (usually 1 piece per composer,
+  sometimes only 1-2 composers per era) — growing it further is still worthwhile, same rule
+  as always: only add a piece if genuinely confident about the facts, verify via WebSearch/
+  WebFetch rather than relying on memory, and don't pad the count just to pad it. WebSearch
+  is confirmed working in this sandbox even though direct `curl`/`WebFetch` to
+  `roandr694.github.io` is blocked — different egress paths, don't conflate them.
+- Did NOT touch the still-undecided "default the Studies level filter based on curriculum
+  month" idea (flagged 2026-09-06, still open as of 2026-09-07). Read the Plan tab's
+  curriculum intro text closely this session ("Months 1-12 take you through every key at
+  Levels I-III; months 13-18 are Level IV") — this rules out the simple guess floated
+  earlier ("months 1-6 = Level I" etc.) since Levels I-III are apparently interleaved across
+  all of months 1-12, not sequential blocks. A real mapping would need a more careful
+  per-month judgment call than a mechanical formula; still not obviously worth guessing at.
+- Everything else from the 2026-09-07 entry below stands (Studies collapsible-card
+  reorganization is done and doesn't need further work).
+
 ## State as of 2026-09-07
 
 Picked up the standing item from the last two sessions' notes: the Studies tab's "All"
