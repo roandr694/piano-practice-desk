@@ -1555,6 +1555,20 @@ let planLen = store.get("planlen","45");
 let curMonth = store.get("curmonth", 0);
 function curYearRow(){ return DATA.year.find(y=>y[0]===curMonth) || null; }
 function setCurMonth(n){ curMonth = n; store.set("curmonth", n); renderPlan(); renderToday(); renderScales(); }
+/* End-of-month check, keyed by curriculum month (0 = no month set yet) so ticking every box in
+   month 1 doesn't leave a permanently-stale, all-checked list sitting there in month 3. Migrates
+   the old flat-array format (one shared list, no month) into the new {month: [indices]} shape the
+   first time it's read, attributing any pre-existing checks to whichever month is current now. */
+function monthChkAll(){
+  let v = store.get("monthchk", {});
+  if (Array.isArray(v)){
+    v = v.length ? { [curMonth]: v } : {};
+    store.set("monthchk", v);
+  }
+  return v;
+}
+function monthChkFor(m){ return monthChkAll()[m] || []; }
+function setMonthChk(m, list){ const all = monthChkAll(); all[m] = list; store.set("monthchk", all); }
 /* Only months 1-6 name specific keys ("C, G major · A, E minor"); months 7-18 use review
    language ("Review all 12 majors", "All 24 keys, four octaves"...) that doesn't map to a
    short key list, so this returns null for those rather than guessing. */
@@ -1643,9 +1657,9 @@ function renderPlan(){
   <div class="tw"><table><thead><tr><th>Material</th>${lv.map(l=>`<th class="n">${l}</th>`).join("")}</tr></thead>
   <tbody>${DATA.targets.map(t=>`<tr><td>${esc(t[0])}</td>${t.slice(1).map(v=>
     `<td class="n">${v?"\u2669="+v:"\u2014"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
-  <h2>End-of-month check</h2>
+  <h2>End-of-month check${curMonth ? ` &mdash; month ${curMonth}` : ""}</h2>
   <p class="note">Ten minutes on the last day of the month, with a recording device. Anything not
-  yet solid carries into next month.</p>
+  yet solid carries into next month.${curMonth ? "" : " Set a current month above and each month gets its own checklist &mdash; ticking one month's boxes won't leave next month's pre-checked."}</p>
   <div class="tw"><table><thead><tr><th>Check</th><th class="n" style="width:90px">Solid</th></tr></thead><tbody>
   ${["All of this month's scales, hands together, no stumbles",
      "Their arpeggios, root position and inversions",
@@ -1658,12 +1672,12 @@ function renderPlan(){
     .map((c,i)=>`<tr><td>${c}</td><td class="n"><input type="checkbox" data-chk="${i}"
       style="width:17px;height:17px;accent-color:var(--felt)"></td></tr>`).join("")}
   </tbody></table></div>`;
-  const saved = store.get("monthchk", []);
+  const saved = monthChkFor(curMonth);
   document.querySelectorAll("[data-chk]").forEach(cb=>{
     cb.checked = saved.includes(+cb.dataset.chk);
     cb.onchange = () => {
-      const cur = store.get("monthchk", []); const i = +cb.dataset.chk;
-      store.set("monthchk", cb.checked ? [...new Set([...cur,i])] : cur.filter(x=>x!==i));
+      const cur = monthChkFor(curMonth); const i = +cb.dataset.chk;
+      setMonthChk(curMonth, cb.checked ? [...new Set([...cur,i])] : cur.filter(x=>x!==i));
     };
   });
   document.querySelectorAll("#p-plan button[data-pl]").forEach(b=>{
