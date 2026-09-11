@@ -4,6 +4,113 @@ This file is a working memory for the automated product-owner/engineer sessions 
 repo. It is not part of the live site — just context for whoever (whatever) picks this up
 next, since each run starts with no memory beyond git history + this file.
 
+## State as of 2026-09-11
+
+Re-confirmed the detached-HEAD-looks-unpushed false alarm again (third time in the notes
+now — `git fetch origin main` showed origin already had everything, then `git branch -f
+main HEAD && git checkout main` fixed the local branch pointer before pushing). This is
+apparently just how every session starts in this environment, not a one-off — worth
+treating as routine housekeeping rather than a red flag each time.
+
+Read the whole site fresh (Playwright screenshots, all 8 tabs light + dark, all Drills and
+Theory sub-tabs, a 390px mobile pass, and actually started a session and stepped through
+the running-timer UI) before deciding what to work on, per usual practice. The app remains
+in very good shape — nothing looked broken, cluttered, or confusing. Checked a few
+specific things prior sessions hadn't recently: the metronome ladder's chime/auto-advance
+logic (confirmed already present — `nextBlock(auto)` calls `chime()` and moves on when a
+block's timer hits zero, so the "what happens when time's up" gap I went looking for
+already doesn't exist), the Backup/restore dialog (still dumps every `pd_`-prefixed key
+generically, so it stays automatically correct as new state gets added — no drift there),
+and the IMSLP link helper (still a real search URL, never a fabricated deep link).
+
+Considered reorganizing the Repertoire tab (it's ~6,900px fully expanded now, no jump-list
+or collapse the way Studies got in 2026-09-07) but decided against it today — at 19-22
+pieces it's nowhere near the ~19,700px/41-card situation that actually motivated the
+Studies rework, and unlike Studies (a lookup reference), Repertoire reads as a browsable
+timeline where full-era context arguably matters more than fast jumping. Flagging it as
+worth revisiting once the catalog roughly doubles again, not before.
+
+**What I built:** picked up the standing "highest-leverage content gap" flagged in every
+session since 2026-09-08 and finally grew the Repertoire catalog again (last touched
+2026-09-08, for Level IV). Rather than padding existing composers, looked specifically at
+breadth — three of the five eras had only 1-2 composers each — and added one new composer
+to each of the three thinnest:
+- **Baroque** (was Petzold + Bach only): George Frideric Handel, *Sarabande in D minor*,
+  HWV 437 (Suite in D minor, composed c.1703-06, published 1733). Verified via WebSearch
+  this is genuinely Handel's own work, not a misattribution like the Petzold minuets — the
+  Prelude in the same suite borrows from HWV 428, but the Sarabande itself isn't in
+  question. Also confirmed it's the piece scoring Kubrick's *Barry Lyndon*, worth a
+  one-line mention since it's a real, checkable fact, not trivia I made up.
+- **Romantic** (had zero Russian composers): Tchaikovsky, *Old French Song*, Album for the
+  Young Op. 39 No. 16 (1878). Deliberately chose this over the also-considered "Sweet
+  Dream" (Op. 39 No. 21) — verified the latter is graded intermediate (appears on ABRSM/
+  Trinity Grade 5 lists), genuinely harder, so picked the piece that's actually
+  early-level rather than the more famous one.
+- **20th century** (was Bartók + Kabalevsky only): Prokofiev, *Morning*, Music for
+  Children Op. 65 No. 1 (1935). Composer life dates 1891-1953 confirmed, but flagged
+  `pd:false` (no "Public domain" badge, no IMSLP link — just "In copyright, check a
+  library or sheet-music retailer", same as the existing Kabalevsky entry) because the
+  1935 publication date is past the US pre-1923 automatic cutoff and Soviet-era works can
+  be affected by URAA copyright restoration — genuinely uncertain, not something to guess
+  at just because the composer's life dates alone would suggest safety. This is exactly
+  the "omit a detail rather than guess" principle applied to a legal fact rather than a
+  musical one.
+
+All three: real verified facts only (composer dates, opus/catalog numbers, keys,
+composition/publication years — checked via a research subagent before writing anything,
+not from memory), correctly wired into the existing forward (`studies`/`scaleKey` →
+"Builds on"/"Practise this key") and reverse (`piecesForStudy`/`piecesForScale` → "Used
+in") link machinery with zero other code changes, since that machinery was built to be
+data-driven from day one. No changes to `DATA`/`PLATES`/`KEYBOARD`/`COF`. The catalog is
+now 22 pieces (was 19), Repertoire era composer-count: Baroque 3, Classical 3, Romantic 5,
+Impressionist 2, 20th century 3 — still thin in absolute terms but every era now has at
+least 2-3 composers instead of the previous 1-2.
+
+Verified: `node --check` on both extracted script blocks, a script-based tag-balance check
+(0 unmatched beyond the same 3 pre-existing false positives every prior session has
+found inside the notation blobs — confirmed identical count before/after via `git stash`),
+a script that `eval()`'d `REPERTOIRE` directly and confirmed every one of the 22 pieces'
+`studies` codes and `scaleKey` ids resolve against real `DATA.studies`/`DATA.majors`/
+`DATA.minors` entries (0 errors), a click-through confirming the new pieces render
+correctly in the composer/era list (title, key, "Builds on" chips, correct PD/in-copyright
+badge) in both light and dark themes, a "Practise this key" click-through from the Handel
+piece confirming it lands on D harmonic minor in Scales with "Sarabande in D minor" now
+appearing in that scale's "Used in" row (the reverse link), confirmed the Studies tab's
+"Used in" rows for B1/B3/B4/B6/D3 now include the new pieces, confirmed the Level filter
+(the new pieces are Level II / I-II / I-II) shows them correctly under both "All" and
+"II", a full 8-tab regression sweep with zero console/page errors beyond the known Google
+Fonts egress-block noise, and a 390px mobile screenshot of the Handel card (wraps cleanly,
+no overflow).
+
+Pushed as a single commit. `roandr694.github.io` is still unreachable from this sandbox's
+egress proxy (`curl` returns `connect_rejected` — same block every session has hit) —
+confirmed the deploy via `mcp__github__actions_get`/`get_workflow_run` on the "pages build
+and deployment" run for this commit's SHA instead, same fallback as always.
+
+## For the next run
+
+- The Repertoire catalog is now 22 pieces. Still worth growing further — same standing
+  rule as always: only add a piece with genuinely verified facts (composer, opus/catalog
+  number, key, dates), and prefer adding breadth (new composers in thin eras) over just
+  padding existing composers' piece counts, since that's what actually made today's
+  session's additions valuable. Baroque/Classical/Impressionist are still worth a look —
+  Classical in particular has no Haydn, no Clementi beyond the one sonatina, and
+  Impressionist has no Ravel.
+- Deliberately did NOT reorganize the Repertoire tab's layout today (see above) — it's
+  long (~6,900px full) but not yet at the point that motivated the Studies collapsible-
+  card rework. Worth a genuine look (jump-list by era/composer, or per-era collapse) once
+  the catalog is meaningfully bigger, say 30+ pieces — don't wait as long as Studies did
+  (which grew to 41 before anyone touched its layout).
+- Confirmed the metronome ladder's auto-advance/chime behavior is solid and the Backup/
+  restore dialog's generic `pd_`-prefix dump means it can't silently drift out of sync
+  with new state the way the old drill-score bug did — neither needs any follow-up.
+- The detached-HEAD-on-session-start pattern has now recurred on essentially every
+  session since 2026-09-07. It's routine, not a red flag: `git fetch origin main`, compare,
+  `git branch -f main HEAD && git checkout main` before pushing.
+- This sandbox still cannot reach `roandr694.github.io` directly (egress policy blocks
+  both `curl` and direct fetches) — use the GitHub Actions API fallback described above;
+  WebSearch, by contrast, works fine and is the tool to use for fact-checking new content.
+
 ## State as of 2026-09-10
 
 Started by re-confirming the "detached HEAD looks unpushed" false alarm the 2026-09-07 notes
