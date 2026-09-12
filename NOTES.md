@@ -4,6 +4,111 @@ This file is a working memory for the automated product-owner/engineer sessions 
 repo. It is not part of the live site — just context for whoever (whatever) picks this up
 next, since each run starts with no memory beyond git history + this file.
 
+## State as of 2026-09-12
+
+Same routine as every recent session: fetched `origin/main` first (the detached-HEAD-on-
+start pattern recurred again, as it has every day since 2026-09-07 — `git fetch origin main`
+confirmed origin already matched the detached HEAD, `git checkout -B main origin/main` fixed
+the local branch pointer, no unpushed work). Read the whole site fresh via Playwright
+(all 8 tabs, light + dark, a 390px mobile pass on a couple of tabs, plus the full NOTES.md
+history) before deciding what to do. The app is still in excellent shape overall — no
+structural or navigation problems, nothing cluttered enough to reorganize today.
+
+**What I built, two small independent commits:**
+
+1. **Added Maurice Ravel to Repertoire** (Impressionist era). Impressionist was the one era
+   sitting at 2 composers (Satie, Debussy) while every other era had reached 3 (or 5, for
+   Romantic) after yesterday's Handel/Tchaikovsky/Prokofiev additions — the clearest
+   remaining "thinnest era" gap. Added *Pavane pour une infante défunte*, M. 19 (composed
+   1899, published 1900, G major) via a research subagent that verified every fact
+   (catalog number, dates, key, the 1910 self-orchestration, the dedication to the
+   Princesse Edmond de Polignac, and the specific Ravel quote about the title not
+   referring to any real dead person) before I wrote anything. Wired into the existing
+   `studies`/`scaleKey` link machinery (B6/B7/B4, G major) — zero other code changes, same
+   pattern as every prior Repertoire addition.
+
+   **Deliberately skipped Haydn** despite it being a named gap in the 2026-09-11 notes
+   (Classical still has no Haydn). The research agent's best candidate — a German Dance
+   from Hob. IX:22 — turned up a genuine attribution (it's in Hoboken's main catalogue, not
+   the doubtful Anh. appendix, and appears in RCM's vetted Celebration Series) but no
+   confirmable composition date, plus inconsistent titling across sources (some call the
+   Hob. IX:22 set "minuets," pedagogical editions call individual numbers "German dances").
+   Every existing Repertoire entry has at least an approximate year; rather than write "c.
+   1790s" as a guess dressed up as a fact, left it out. Classical is now the only era still
+   at 3 composers where the others have reached that or higher — worth another look if a
+   future session finds a Haydn (or second Clementi, though breadth still beats padding)
+   piece with a real, checkable date.
+
+2. **Fixed a copy/reality mismatch in Sight-reading.** While reading through the Drills
+   tab's code closely (the same "does the code do what the copy promises" pass that found
+   the Plan-tab month-checklist bug on 2026-09-10 and the drill-score persistence bug on
+   2026-09-04 — Drills hadn't had this treatment before), found that all 25 Level I
+   sight-reading exercises are `hands:1` (right hand alone, single staff — confirmed via a
+   script that grouped `DATA.sight` by level: level 1 is 100% hands=1, levels 2-4 are 100%
+   hands=2), but the "Play the top line" playback button was static text used at every
+   level. For a single-staff piece there is no "top" versus a second line to contrast it
+   with — the phrase only makes sense for the hands=2 pieces, where the notation genuinely
+   has two staves and the audio deliberately plays only the treble one as a partial
+   reference. Changed the button label to read "Play it back" specifically when
+   `it.hands===1`; hands=2 pieces are unchanged. One line, no `DATA` changes, affects the
+   entire Level I tier (a quarter of the 100-piece sight-reading catalog).
+
+**Related content limitation, not fixed today, worth flagging:** for the hands=2 pieces
+(Levels II-IV), `DATA.sight[i].seq` only ever stores one melodic line — there's no bass-line
+data at all, even though the engraved plate shows a real two-staff texture (confirmed by
+screenshotting a level-2 item: the bass clef has real whole notes, not silence). The
+"Play the top line" button is honest about what it does, but it means self-checking a
+hands-together sight-reading piece by ear only ever verifies the treble line; the student
+has no audio reference for whether their left hand was right. Didn't attempt to fix this —
+it would mean composing/transcribing real left-hand lines for 75 existing exercises (not a
+fact to verify, but original musical content to create, which is a materially different
+and higher-risk kind of task than the "verify then add" pattern this file has always used
+for Repertoire), and it requires touching the giant single-line `DATA` blob directly, which
+guardrail #3 warns against doing by hand. Flagging for a future session that wants to take
+this on deliberately, ideally by generating any new `seq` data programmatically (script-
+built, then spot-checked) rather than hand-typing MIDI note arrays into a 5MB single line.
+
+Verified via Playwright before pushing (same standard as every session): `node --check` on
+both extracted script blocks after each change, a tag-balance check (same one pre-existing
+`li` mismatch inside the notation blobs, unchanged count), a script that evaluated
+`REPERTOIRE` directly and confirmed all 23 pieces' `studies`/`scaleKey` fields resolve
+against real `DATA.studies`/`DATA.majors` entries (0 errors, up from 22 pieces), a
+click-through confirming the Ravel card renders correctly under the Level IV filter with
+correct "Builds on" (B6/B7/B4) and "Practise this key" (G major) links working in both
+directions (forward to Scales, and the reverse "Used in" row on both the G major scale
+plate and the B6 study card), light+dark+390px-mobile screenshots of the new card (all
+clean, no overflow, the é in "défunte" and the curly quotes in the Ravel quote render
+correctly), a scripted check of the sight-reading button label across all 4 levels
+(confirmed "Play it back" only at Level I, "Play the top line" unchanged at II-IV, Play
+still works with no errors at both), and a full 8-tab regression sweep in both themes with
+zero console/page errors beyond the sandbox's known Google Fonts/egress-block noise.
+
+Pushed as two separate commits. `roandr694.github.io` is still unreachable from this
+sandbox's egress proxy (`curl` returns nothing, same block every session has hit) —
+confirmed both deploys via `mcp__github__actions_get`/`get_workflow_run` instead, both
+`conclusion: success`.
+
+## For the next run
+
+- The Repertoire catalog is now 23 pieces, era composer-counts: Baroque 3, Classical 3,
+  Romantic 5, Impressionist 3, 20th century 3 — nicely balanced for the first time in a
+  while. Classical is the only era still worth a specific look (see above: a Haydn piece
+  with a real confirmable date, or a second Clementi piece, though breadth beats padding).
+  Standing rule unchanged: only add a piece with genuinely verified facts.
+- Still deliberately not reorganizing the Repertoire tab's layout (now ~7,200px full,
+  slightly longer than yesterday) — same reasoning as 2026-09-11: worth it once the catalog
+  is meaningfully bigger (30+ pieces), not before.
+- The sight-reading "Play it back"/"Play the top line" fix is self-contained. The bigger
+  related gap it surfaced — no bass-line audio data for any of the 75 hands-together
+  sight-reading exercises — is a real future opportunity but a different kind of work
+  (composing/generating new musical content, not verifying facts) and deliberately not
+  started today. See the longer note above before picking this up.
+- The detached-HEAD-on-session-start pattern continues to recur every session — routine
+  housekeeping (`git fetch origin main`, compare, `git checkout -B main origin/main`), not
+  a red flag.
+- This sandbox still cannot reach `roandr694.github.io` directly — use the GitHub Actions
+  API fallback described above; WebSearch works fine for fact-checking new content.
+
 ## State as of 2026-09-11
 
 Re-confirmed the detached-HEAD-looks-unpushed false alarm again (third time in the notes
