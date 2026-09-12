@@ -1432,7 +1432,7 @@ function renderDrills(){
       ${plate(it.id,"","")}
       <div class="rctl" style="margin-top:12px">
         <button type="button" class="primary" data-sr="next">Next exercise</button>
-        <button type="button" data-sr="play">Play the top line</button>
+        <button type="button" data-sr="play">${it.hands===1?"Play it back":"Play the top line"}</button>
         <button type="button" data-sr="metro">Set the metronome to ${SR_TEMPO[it.level]}</button>
       </div>
       <div class="scoreline"><span>Read so far <b>${sight.seen}</b></span>
