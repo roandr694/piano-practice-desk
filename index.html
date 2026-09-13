@@ -279,6 +279,8 @@ tr.is-today td{background:var(--brass-soft)}
 .history summary .hcount{text-transform:none;letter-spacing:0;font-weight:400;
   color:var(--muted);margin-left:6px}
 .historybody{margin-top:16px}
+.histhead{display:flex;align-items:baseline;justify-content:space-between;gap:6px 16px;flex-wrap:wrap}
+.histhead h3.sub{margin:26px 0 10px}
 .heatwrap{overflow-x:auto;padding-bottom:4px}
 .heatmap{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;width:max-content}
 .heatmap .cell{width:11px;height:11px;border-radius:2px;background:var(--sunk)}
@@ -767,10 +769,24 @@ function renderHistory(){
         <div class="heatlegend"><span>Less</span><span class="cell lvl0"></span><span class="cell lvl1"></span>
           <span class="cell lvl2"></span><span class="cell lvl3"></span><span class="cell lvl4"></span><span>More</span></div>
       </div>
-      <h3 class="sub">Recent sessions</h3>
+      <div class="histhead"><h3 class="sub">Recent sessions</h3>
+        <button type="button" class="scorereset" style="margin-left:0" data-exportlog>Export full log (CSV)</button></div>
       <ul class="sessionlist">${recentHTML}</ul>
     </div>
   </details>`;
+}
+function exportLogCSV(){
+  const log = store.get("log", []);
+  if (!log.length) return;
+  const escCsv = v => { const s = String(v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const rows = [["Date","Session length (min)","Minutes practised"], ...log.map(x=>[x.d, x.r, x.m])];
+  const csv = rows.map(r => r.map(escCsv).join(",")).join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "practice-desk-log.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* -- the runner -- */
@@ -980,6 +996,7 @@ document.getElementById("p-today").addEventListener("click", e => {
   if (e.target.closest("[data-startmonth]")){ setCurMonth(1); return; }
   if (e.target.closest("[data-nextmonth]")){ setCurMonth(curMonth+1); return; }
   if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
+  if (e.target.closest("[data-exportlog]")){ exportLogCSV(); return; }
 });
 document.getElementById("p-today").addEventListener("change", e => {
   const cb = e.target.closest("input[type=checkbox][data-i]"); if (!cb) return;
