@@ -1220,11 +1220,24 @@ function renderTheory(){
     items.map(t=>`<h2>${esc(t.t)}</h2><p class="note">${t.note}</p>${plate(t.id,"","")}`).join("");
   const box = document.getElementById("cofBox");
   if (box) box.querySelectorAll("text").forEach(el=>{
-    const i = DATA.majors.findIndex(m => m.short === el.textContent.trim());
-    if (i < 0) return;
+    const txt = el.textContent.trim();
+    const mi = DATA.majors.findIndex(m => m.short === txt);
+    if (mi >= 0){
+      el.classList.add("hot"); el.style.cursor = "pointer";
+      el.addEventListener("click", ()=>{
+        scaleForm="major"; scaleKey=mi; renderScales();
+        document.querySelector('#nav button[data-tab="scales"]').click();
+      });
+      return;
+    }
+    // relative-minor ring: match by DATA.majors[i].rel rather than DATA.minors[i].short,
+    // since a few positions (e.g. F# major's "D#" minor) are spelled enharmonically
+    // differently in DATA.minors ("Ebm") than the diagram displays
+    const ni = DATA.majors.findIndex(m => m.rel.replace(" minor","").toLowerCase() === txt.toLowerCase());
+    if (ni < 0 || !DATA.minors[ni]) return;
     el.classList.add("hot"); el.style.cursor = "pointer";
     el.addEventListener("click", ()=>{
-      scaleForm="major"; scaleKey=i; renderScales();
+      scaleForm="natural"; scaleKey=ni; renderScales();
       document.querySelector('#nav button[data-tab="scales"]').click();
     });
   });
