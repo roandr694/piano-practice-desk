@@ -366,6 +366,7 @@ tr.is-today td{background:var(--brass-soft)}
 .piece .metarow button{background:var(--sunk);border:1px solid var(--rule);border-radius:6px;
   padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
 .piece .metarow button:hover{border-color:var(--brass);color:var(--ink)}
+.piece .metarow .tracked{color:var(--ok);font-size:12px;padding:4px 2px}
 .studychips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11.5px;
   color:var(--faint);margin-bottom:9px}
 .studychips button{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--sunk);
@@ -1901,9 +1902,11 @@ function goToPiece(slug){
 /* -- my repertoire: the pieces actually being practised, distinct from the catalog above -- */
 function myRep(){ return store.get("myrep", []); }
 function setMyRep(list){ store.set("myrep", list); }
+const repKey = (title, composer) => (title||"").trim().toLowerCase()+"␟"+(composer||"").trim().toLowerCase();
+function myRepHas(title, composer){ return myRep().some(r => repKey(r.title,r.composer)===repKey(title,composer)); }
 function addMyRepItem(title, composer, status){
   title = title.trim();
-  if (!title) return;
+  if (!title || myRepHas(title, composer)) return;
   const list = myRep();
   list.push({id: "r"+Date.now()+Math.random().toString(36).slice(2,7), title, composer: (composer||"").trim(),
              status: status==="polishing" ? "polishing" : "learning", note: ""});
@@ -1958,7 +1961,9 @@ function renderRepertoire(){
             <div class="metarow">
               ${p.key ? `<span>Key: ${esc(p.key)}</span>` : ""}
               ${p.scaleKey ? `<button type="button" data-goscale="${p.scaleKey.kind}:${p.scaleKey.id}">Practise this key →</button>` : ""}
-              <button type="button" data-addrep-title="${escAttr(p.title)}" data-addrep-composer="${escAttr(c.name)}">+ Track this piece</button>
+              ${myRepHas(p.title, c.name)
+                ? `<span class="tracked">✓ Tracked</span>`
+                : `<button type="button" data-addrep-title="${escAttr(p.title)}" data-addrep-composer="${escAttr(c.name)}">+ Track this piece</button>`}
             </div>
             <div class="studychips"><span>Builds on</span>${p.studies.map(code =>
               `<button type="button" data-gostudy="${code}">${code}</button>`).join("")}</div>
@@ -2001,7 +2006,7 @@ document.getElementById("p-repertoire").addEventListener("click", e => {
   const gk = e.target.closest("button[data-goscale]");
   if (gk){ const [kind,id] = gk.dataset.goscale.split(":"); goToScale(kind,id); return; }
   const ar = e.target.closest("button[data-addrep-title]");
-  if (ar){ addMyRepItem(ar.dataset.addrepTitle, ar.dataset.addrepComposer, "learning"); renderRepertoire(); return; }
+  if (ar){ addMyRepItem(ar.dataset.addrepTitle, ar.dataset.addrepComposer, "learning"); renderRepertoire(); renderToday(); return; }
   const ms = e.target.closest("button[data-mrstatus]");
   if (ms){
     const list = myRep(); const item = list.find(r=>r.id===ms.dataset.mrstatus);
