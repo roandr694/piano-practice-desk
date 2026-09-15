@@ -1081,6 +1081,10 @@ document.getElementById("p-scales").addEventListener("click", e => {
 
 /* ---------- ARPEGGIOS ---------- */
 let arpKey = 0;
+function usedByArp(majorKey){
+  const pmin = parallelMinorOf(majorKey.id);
+  return piecesForScale("major", majorKey.id).concat(pmin ? piecesForScale("minor", pmin.id) : []);
+}
 function renderArps(){
   const k = DATA.majors[arpKey];
   document.getElementById("p-arps").innerHTML = `
@@ -1094,6 +1098,7 @@ function renderArps(){
     `<button type="button" data-arp="${i}" aria-pressed="${i===arpKey}">
       <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
   ${plate(k.arp, k.arplbl, "root position, two octaves \u00b7 major then parallel minor")}
+  ${usedByHTML(usedByArp(k))}
   <div class="rctl playrow" style="margin:-6px 0 16px">
     <button type="button" class="primary" data-arpplay="1">\u25b6 Play this arpeggio</button>
   </div>
@@ -1127,7 +1132,9 @@ document.getElementById("p-arps").addEventListener("click", e => {
   const b = e.target.closest("button[data-arp]");
   if (b){ arpKey = +b.dataset.arp; renderArps(); return; }
   const p = e.target.closest("button[data-arpplay]");
-  if (p) playArpAudio();
+  if (p){ playArpAudio(); return; }
+  const gp = e.target.closest("button[data-gopiece]");
+  if (gp) goToPiece(gp.dataset.gopiece);
 });
 
 /* ---------- STUDIES ---------- */
@@ -1293,10 +1300,14 @@ function upDownRun(offsets, rootMidi){
   up.push(rootMidi+24);
   return up.concat(up.slice(0, up.length-1).reverse());
 }
+function scheduleRun(seq, secPerNote, startAt){
+  let t = startAt;
+  seq.forEach(m=>{ noteTone(m, t, secPerNote*0.92, 0.22); t += secPerNote; });
+  return t;
+}
 function playRun(seq, secPerNote){
   if (!ensureAudio()) return;
-  let t = ac.currentTime + 0.08;
-  seq.forEach(m=>{ noteTone(m, t, secPerNote*0.92, 0.22); t += secPerNote; });
+  scheduleRun(seq, secPerNote, ac.currentTime + 0.08);
 }
 function playScaleAudio(){
   const list = scaleForm==="major" ? DATA.majors : DATA.minors;
@@ -1305,10 +1316,25 @@ function playScaleAudio(){
   const {root, offs} = scaleOffsets(notesStr);
   playRun(upDownRun(offs, 48+root), 30/bpm);
 }
+// The parallel minor isn't always the same-lettered id (Db major's parallel minor
+// is spelled C# minor in DATA.minors) — match by pitch class, not by string id,
+// same technique as the circle-of-fifths relative-minor lookup.
+function parallelMinorOf(majId){
+  const maj = DATA.majors.find(m=>m.id===majId);
+  const majRoot = noteSemitone(maj.notes.trim().split(/\s+/)[0]);
+  return DATA.minors.find(m => noteSemitone(m.notes.natural.trim().split(/\s+/)[0]) === majRoot);
+}
 function playArpAudio(){
   const k = DATA.majors[arpKey];
-  const root = noteSemitone(k.notes.trim().split(/\s+/)[0]);
-  playRun(upDownRun([0,4,7], 48+root), 30/bpm);
+  const secPerNote = 30/bpm;
+  const majSeq = upDownRun([0,4,7], 48+noteSemitone(k.notes.trim().split(/\s+/)[0]));
+  const pmin = parallelMinorOf(k.id);
+  if (!ensureAudio()) return;
+  const t1 = scheduleRun(majSeq, secPerNote, ac.currentTime + 0.08);
+  if (pmin){
+    const minRoot = noteSemitone(pmin.notes.natural.trim().split(/\s+/)[0]);
+    scheduleRun(upDownRun([0,3,7], 48+minRoot), secPerNote, t1 + 0.15);
+  }
 }
 
 let drillTab = store.get("drilltab","ear");
