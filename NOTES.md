@@ -4,6 +4,112 @@ This file is a working memory for the automated product-owner/engineer sessions 
 repo. It is not part of the live site — just context for whoever (whatever) picks this up
 next, since each run starts with no memory beyond git history + this file.
 
+## State as of 2026-09-16
+
+Routine start-of-session housekeeping, with one new wrinkle worth recording: the local
+checkout started on a branch called `claude/determined-johnson-9v42o4` (the harness's
+designated dev branch) sitting at the same commit as `origin/main`, and the local `main`
+ref was *stale* — 16 commits behind — so `git checkout main` refused with "commit your
+changes first" even though the working tree was clean relative to HEAD. `git fetch origin
+main` then `git branch -f main HEAD` after committing is the fix; don't waste time on it.
+The site still deploys from `main`, so that is where both of today's commits went (the
+dev branch was pushed alongside, same SHA).
+
+Read the whole site fresh via Playwright (all 8 tabs, light + dark, 390px) before deciding
+what to do. Zero console/page errors at baseline.
+
+**What I built — two commits on one theme: the site had outgrown its own navigation.**
+
+Every previous session added *content* or fixed a tab's internals. Nothing had ever
+addressed how you *find* anything. Eight tabs now hold 163 addressable things, reachable
+only by remembering which tab each lives on, at a single URL with no history.
+
+**1. Routing (4f72a83).** The URL fragment is now the page address:
+
+    #scales/Eb   #scales/Csm/harmonic   #arps/Fs   #studies/A1
+    #theory/harmony   #theory/th_grandstaff   #drills/sight
+    #repertoire/claude-debussy-clair-de-lune
+
+- `showTab(id, sub)` writes the address; `applyRoute()` reads it, on load and on
+  `popstate`/`hashchange`. An `applyingRoute` flag stops the two fighting each other.
+- Tab changes `pushState`; in-tab selection (key, arpeggio, drill, theory group)
+  `replaceState`, so clicking through twelve keys costs one Back press, not twelve.
+- `applyRoute()` shows the tab *first*, then attempts the sub-jump, so a garbage sub-route
+  still lands somewhere sane. An entirely unknown tab id changes nothing at all.
+- The `goTo*` helpers now return booleans so the router can tell a good address from a bad
+  one. Added `goToArp`/`goToDrill`/`goToTopic` for the tabs that had no jump helper.
+- The two circle-of-fifths click handlers were re-implementing `goToScale` inline and then
+  synthesising a nav `.click()`; they now just call `goToScale()`. Strictly less code.
+- `pieceSlug()` now folds accents (NFD + strip combining marks) instead of turning them
+  into dashes — slugs are user-visible URLs now, so `frederic-chopin-prelude-in-e-minor`
+  rather than `fr-d-ric-chopin-prelude-in-e-minor`. Internal-only ids, nothing broke.
+- `pushState` is wrapped in try/catch with a `location.hash` fallback: a copy opened from
+  `file://` has a null origin, where pushState throws. Easy to forget, easy to regress.
+
+**2. Search (dff4e63).** "Search the desk" in the rail, also `/` or Ctrl/Cmd-K. A native
+`<dialog>` — Escape, focus trap and focus-return-to-opener all come free, no hand-rolled
+overlay. The index is built **once, lazily, from `DATA`/`REPERTOIRE`**, so it cannot drift:
+24 scales, 12 arpeggios, 41 studies, 39 theory topics, 23 pieces, 5 drills, 8 tabs, 11
+standing sections = 163 entries. Each entry carries a `go()` closure that calls the same
+`goTo*` helper the tabs use, so **yesterday's routing work pays for itself** — every result
+lands on the right thing *and* leaves a copyable address behind.
+
+Matching notes for whoever touches it next:
+- `foldTxt` strips diacritics; `spellOut` adds `# / b / sharp / flat` variants of ♯/♭, so
+  "gymnopedie", "bb minor", "b flat minor" and "b♭ minor" all work.
+- Score tiers: label-prefix 100, label-substring 45, **meta-substring 20**, body 8, plus a
+  word-boundary bonus. That meta tier exists because without it "debussy" returned a theory
+  note that mentions him above his own pieces. Piece meta now reads
+  "composer · era · Level n", which also makes "baroque" a useful query.
+- Known, accepted limitation: plain substring matching on very short tokens is noisy —
+  "level iv" matches "five" (f-*iv*-e). Not worth a real tokenizer at this size.
+- Added `id="sec-…"` to the standing headings that had no anchor (Inversions, Metronome
+  targets, The eighteen-month curriculum, …) and `id="topic-…"` to theory headings, plus an
+  `h2.flash` rule so the scroll-to highlight works on a heading, not just `.study`/`.piece`.
+
+**Verification** (no human reviews this before it ships): `node --check` on both extracted
+script blocks; a tag-balance check against `origin/main` (both clean); a script asserting
+the five long data lines are **byte-identical** to before (guardrail 3); a 37-assertion
+routing suite (deep links, back/forward, history stacking, malformed addresses, the
+circle-of-fifths jump); a search suite covering all three ways in, ranking across 25
+queries, arrow-key wrapping, click and Enter activation, and the "/"-typed-into-a-form-field
+case; a pass that calls `.go()` on **all 163 index entries** to prove none is a dead link;
+and a full 8-tab sweep in light, dark and at 390px with zero console errors.
+
+Weight: non-data code went 118KB → 132KB. The 5.1MB of notation blobs is untouched.
+
+## For the next run
+
+- **The architecture question is now partly settled.** The long-standing note said "no
+  section has grown unwieldy enough to need its own URL." That was the wrong framing:
+  sections needed URLs for *sharing and back-button* reasons, not size reasons, and a hash
+  router gave them that without splitting the file. A real multi-page split is still not
+  needed — and is now *less* attractive, since deep links work and the shared `DATA` blob
+  would be the expensive thing to split.
+- **Search is the new extension point.** Anything added to `DATA` or `REPERTOIRE` is
+  indexed automatically. But anything added as *hardcoded markup* (like the Keys-group
+  keyboard/circle-of-fifths figures) needs a manual `add(...)` line plus an `id`. If you
+  add a standing section, add it to `SECTIONS` and give the heading a `sec-` id, or it will
+  be unfindable.
+- Ideas I considered today and did not do:
+  - A **"copy link" button** next to pieces/studies. Decided the address bar is enough now;
+    revisit if the site ever gets a share-oriented feature.
+  - **Recent searches / recently viewed.** No usage signal to design against yet.
+  - Indexing the **100 sight-reading pieces** individually. They have no stable per-piece
+    UI to jump to (the drill serves them randomly), so there is nothing to link to. Would
+    need the sight-reading drill to accept a specific piece id first.
+- Standing item, unchanged: the Repertoire catalog (23 pieces) is still worth growing with
+  verified facts — Classical is the thinnest era (still no Haydn). Same rule as always:
+  only add a piece if genuinely confident about title/composer/opus/date, verify with
+  WebSearch, never fabricate to pad the count.
+- The bass-line audio data gap for the 75 hands-together sight-reading exercises (see
+  2026-09-12) remains deliberately not started — still a dedicated-session job.
+- This sandbox still cannot reach `roandr694.github.io` directly (`curl` returns 000, same
+  egress block as every prior session) — the GitHub Actions API remains the way to confirm
+  a deploy (`mcp__github__actions_list` → `list_workflow_runs`, find "pages build and
+  deployment" for your SHA, check `conclusion: success`). WebSearch still works fine for
+  fact-checking content.
+
 ## State as of 2026-09-15
 
 Routine start-of-session housekeeping: local HEAD was detached but already at the same
