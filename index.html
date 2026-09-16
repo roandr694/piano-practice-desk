@@ -381,6 +381,8 @@ tr.is-today td{background:var(--brass-soft)}
 .sourcerow a{color:var(--brass)}
 .study,.piece{transition:background-color .4s ease}
 .study.flash,.piece.flash{background-color:var(--brass-soft);border-radius:8px}
+h2.flash{background-color:var(--brass-soft);border-radius:4px;
+  box-shadow:0 0 0 6px var(--brass-soft)}
 .usedby{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:12px;color:var(--muted);
   margin-top:10px}
 .usedby button{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--sunk);
@@ -684,9 +686,24 @@ const TABS=[["today","Session"],["scales","Scales"],["arps","Arpeggios"],["studi
             ["theory","Theory"],["drills","Drills"],["repertoire","Repertoire"],["plan","The plan"]];
 document.getElementById("nav").innerHTML = TABS.map(([id,label],i)=>
   `<button type="button" data-tab="${id}"${i===0?' aria-current="true"':""}><span class="n">${String(i+1).padStart(2,"0")}</span>${label}</button>`).join("");
-function showTab(id){
+/* Every tab has an address. The URL fragment is kept in step with what is on
+   screen — "#scales/Eb", "#repertoire/claude-debussy-clair-de-lune" — so a
+   page can be bookmarked or shared, a reload lands where you left off, and the
+   browser's back button walks back through the tabs instead of leaving the site. */
+const TAB_IDS = TABS.map(([id]) => id);
+let applyingRoute = false;
+function setRoute(id, sub, replace){
+  if (applyingRoute) return;                   // we are reacting to the URL, not driving it
+  const next = "#" + id + (sub ? "/" + sub : "");
+  if (location.hash === next) return;
+  // a copy opened straight off disk has a null origin, where pushState throws
+  try { history[replace ? "replaceState" : "pushState"](null, "", next); }
+  catch(e){ location.hash = next.slice(1); }
+}
+function showTab(id, sub){
   document.querySelectorAll("#nav button").forEach(x=>x.setAttribute("aria-current", String(x.dataset.tab===id)));
   TABS.forEach(([t])=>{ document.getElementById("p-"+t).hidden = (t !== id); });
+  setRoute(id, sub);
 }
 document.getElementById("nav").onclick = e => {
   const b = e.target.closest("button[data-tab]"); if (!b) return;
@@ -1008,6 +1025,13 @@ document.getElementById("p-today").addEventListener("change", e => {
 
 /* ---------- SCALES ---------- */
 let scaleKey = 0, scaleForm = "major";
+/* the key on screen (and, for a minor, which form of it) is part of the address */
+function scaleRouteSub(){
+  const k = (scaleForm === "major" ? DATA.majors : DATA.minors)[scaleKey];
+  if (!k) return "";
+  return (scaleForm === "major" || scaleForm === "natural") ? k.id : k.id + "/" + scaleForm;
+}
+function syncScaleRoute(){ setRoute("scales", scaleRouteSub(), true); }
 function renderScales(){
   const isMaj = scaleForm === "major";
   const list = isMaj ? DATA.majors : DATA.minors;
@@ -1069,9 +1093,9 @@ function renderScales(){
 }
 document.getElementById("p-scales").addEventListener("click", e => {
   const f = e.target.closest("button[data-form]");
-  if (f){ scaleForm = f.dataset.form; renderScales(); window.scrollTo({top:0,behavior:"instant"}); return; }
+  if (f){ scaleForm = f.dataset.form; renderScales(); syncScaleRoute(); window.scrollTo({top:0,behavior:"instant"}); return; }
   const k = e.target.closest("button[data-key]");
-  if (k){ scaleKey = +k.dataset.key; renderScales(); return; }
+  if (k){ scaleKey = +k.dataset.key; renderScales(); syncScaleRoute(); return; }
   const p = e.target.closest("button[data-scaleplay]");
   if (p){ playScaleAudio(); return; }
   if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
@@ -1081,6 +1105,13 @@ document.getElementById("p-scales").addEventListener("click", e => {
 
 /* ---------- ARPEGGIOS ---------- */
 let arpKey = 0;
+function goToArp(id){
+  const idx = DATA.majors.findIndex(k => k.id === id);
+  if (idx < 0) return false;
+  arpKey = idx; renderArps(); showTab("arps", id);
+  window.scrollTo({top:0, behavior:"instant"});
+  return true;
+}
 function usedByArp(majorKey){
   const pmin = parallelMinorOf(majorKey.id);
   return piecesForScale("major", majorKey.id).concat(pmin ? piecesForScale("minor", pmin.id) : []);
@@ -1130,7 +1161,7 @@ function renderArps(){
 }
 document.getElementById("p-arps").addEventListener("click", e => {
   const b = e.target.closest("button[data-arp]");
-  if (b){ arpKey = +b.dataset.arp; renderArps(); return; }
+  if (b){ arpKey = +b.dataset.arp; renderArps(); setRoute("arps", DATA.majors[arpKey].id, true); return; }
   const p = e.target.closest("button[data-arpplay]");
   if (p){ playArpAudio(); return; }
   const gp = e.target.closest("button[data-gopiece]");
@@ -1193,6 +1224,23 @@ document.getElementById("p-studies").addEventListener("click", e => {
 
 /* ---------- THEORY ---------- */
 let thGroup = 0;
+const groupSlug = i => (DATA.groups[i] || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+const GROUP_SLUGS = DATA.groups.map((g, i) => groupSlug(i));
+function goToTopic(id){
+  const t = DATA.theory.find(x => x.id === id);
+  // "keyboard" and "circle-of-fifths" are figures written into the Keys group by hand
+  const group = t ? t.group : (id === "keyboard" || id === "circle-of-fifths" ? 1 : -1);
+  if (group < 0) return false;
+  thGroup = group; renderTheory(); showTab("theory", id);
+  setTimeout(() => {
+    const el = document.getElementById("topic-" + id);
+    if (!el){ window.scrollTo({top:0, behavior:"instant"}); return; }
+    el.scrollIntoView({behavior:"smooth", block:"start"});
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 1600);
+  });
+  return true;
+}
 function renderTheory(){
   const items = DATA.theory.filter(t=>t.group===thGroup);
   const head = `
@@ -1207,13 +1255,13 @@ function renderTheory(){
   let extra = "";
   if (thGroup===1){
     extra = `
-    <h2>The keyboard</h2>
+    <h2 id="topic-keyboard">The keyboard</h2>
     <p class="note">C is always the white key immediately left of a group of two black keys; F is
     always immediately left of a group of three. Learn those two landmarks and you never count from
     the end of the keyboard again.</p>
     <div class="figwrap">${KEYBOARD}<div class="figcap">Two octaves. Each black key has two names
       depending on which white key it is measured from.</div></div>
-    <h2>The circle of fifths</h2>
+    <h2 id="topic-circle-of-fifths">The circle of fifths</h2>
     <p class="note">Each key is a fifth above the last. Clockwise adds a sharp, counter-clockwise
     adds a flat. Neighbouring keys share all but one note. <b>Tap any key to open its scale.</b></p>
     <div class="figwrap cofwrap" id="cofBox">${COF}<div class="figcap">Outer: major keys. Middle:
@@ -1224,17 +1272,14 @@ function renderTheory(){
       means A&#9837; major.</div>`;
   }
   document.getElementById("p-theory").innerHTML = head + extra +
-    items.map(t=>`<h2>${esc(t.t)}</h2><p class="note">${t.note}</p>${plate(t.id,"","")}`).join("");
+    items.map(t=>`<h2 id="topic-${t.id}">${esc(t.t)}</h2><p class="note">${t.note}</p>${plate(t.id,"","")}`).join("");
   const box = document.getElementById("cofBox");
   if (box) box.querySelectorAll("text").forEach(el=>{
     const txt = el.textContent.trim();
     const mi = DATA.majors.findIndex(m => m.short === txt);
     if (mi >= 0){
       el.classList.add("hot"); el.style.cursor = "pointer";
-      el.addEventListener("click", ()=>{
-        scaleForm="major"; scaleKey=mi; renderScales();
-        document.querySelector('#nav button[data-tab="scales"]').click();
-      });
+      el.addEventListener("click", ()=> goToScale("major", DATA.majors[mi].id));
       return;
     }
     // relative-minor ring: match by DATA.majors[i].rel rather than DATA.minors[i].short,
@@ -1243,15 +1288,13 @@ function renderTheory(){
     const ni = DATA.majors.findIndex(m => m.rel.replace(" minor","").toLowerCase() === txt.toLowerCase());
     if (ni < 0 || !DATA.minors[ni]) return;
     el.classList.add("hot"); el.style.cursor = "pointer";
-    el.addEventListener("click", ()=>{
-      scaleForm="natural"; scaleKey=ni; renderScales();
-      document.querySelector('#nav button[data-tab="scales"]').click();
-    });
+    el.addEventListener("click", ()=> goToScale("minor", DATA.minors[ni].id));
   });
 }
 document.getElementById("p-theory").addEventListener("click", e => {
   const b = e.target.closest("button[data-thg]"); if (!b) return;
-  thGroup = +b.dataset.thg; renderTheory(); window.scrollTo({top:0,behavior:"instant"});
+  thGroup = +b.dataset.thg; renderTheory(); setRoute("theory", groupSlug(thGroup), true);
+  window.scrollTo({top:0,behavior:"instant"});
 });
 
 /* ---------- DRILLS ---------- */
@@ -1340,6 +1383,12 @@ function playArpAudio(){
 let drillTab = store.get("drilltab","ear");
 const DRILL_TABS = [["ear","Ear training"],["sight","Sight-reading"],["ks","Key signatures"],
                     ["cof","Circle of fifths"],["roul","Scale roulette"]];
+function goToDrill(id){
+  if (!DRILL_TABS.some(([d]) => d === id)) return false;
+  drillTab = id; store.set("drilltab", drillTab); renderDrills(); showTab("drills", id);
+  window.scrollTo({top:0, behavior:"instant"});
+  return true;
+}
 let ear = {mode: store.get("earmode","intervals"), diff: store.get("eardiff","core"),
            dir: store.get("eardir","melodic"), q: null, answered: false,
            right: store.get("earright",0), n: store.get("earn",0)};
@@ -1557,7 +1606,8 @@ function renderDrills(){
 }
 document.getElementById("p-drills").addEventListener("click", e => {
   const t = e.target.closest("button[data-dt]");
-  if (t){ drillTab = t.dataset.dt; store.set("drilltab", drillTab); renderDrills(); return; }
+  if (t){ drillTab = t.dataset.dt; store.set("drilltab", drillTab); renderDrills();
+          setRoute("drills", drillTab, true); return; }
   const eb = e.target.closest("button[data-ear]");
   if (eb){
     const v = eb.dataset.ear;
@@ -1756,19 +1806,23 @@ function openStudy(code){
   setTimeout(() => el.classList.remove("flash"), 1600);
 }
 function goToStudy(code){
+  if (!DATA.studies.some(s => s.code === code)) return false;
   fam = "All"; lvlF = "All"; renderStudies();
-  showTab("studies");
+  showTab("studies", code);
   setTimeout(() => openStudy(code));
+  return true;
 }
-function goToScale(kind, id){
+const MINOR_FORMS = ["natural","harmonic","melodic"];
+function goToScale(kind, id, form){
   const list = kind==="major" ? DATA.majors : DATA.minors;
   const idx = list.findIndex(k => k.id===id);
-  if (idx<0) return;
-  scaleForm = kind==="major" ? "major" : "natural";
+  if (idx<0) return false;
+  scaleForm = kind==="major" ? "major" : (MINOR_FORMS.includes(form) ? form : "natural");
   scaleKey = idx;
   renderScales();
-  showTab("scales");
+  showTab("scales", scaleRouteSub());
   window.scrollTo({top:0, behavior:"instant"});
+  return true;
 }
 
 const REPERTOIRE = [
@@ -1911,7 +1965,9 @@ const REPERTOIRE = [
 ];
 
 /* reverse links: which repertoire pieces build on a given study or scale */
-const pieceSlug = (composer, title) => (composer+"-"+title).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+const pieceSlug = (composer, title) => (composer+"-"+title)
+  .normalize("NFD").replace(/[\u0300-\u036f]/g,"")   // the slug is a URL now: Frédéric -> frederic
+  .toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 let _flatPieces = null;
 function allPieces(){
   if (!_flatPieces) _flatPieces = REPERTOIRE.flatMap(era =>
@@ -1926,9 +1982,9 @@ function usedByHTML(pieces){
     `<button type="button" data-gopiece="${p.slug}">${esc(p.title)}</button>`).join("")}</div>`;
 }
 function goToPiece(slug){
-  const p = allPieces().find(x=>x.slug===slug); if (!p) return;
+  const p = allPieces().find(x=>x.slug===slug); if (!p) return false;
   repLevel = "All"; renderRepertoire();
-  showTab("repertoire");
+  showTab("repertoire", slug);
   setTimeout(() => {
     const el = document.getElementById("piece-"+slug);
     if (!el) return;
@@ -1936,6 +1992,7 @@ function goToPiece(slug){
     el.classList.add("flash");
     setTimeout(() => el.classList.remove("flash"), 1600);
   });
+  return true;
 }
 
 /* -- my repertoire: the pieces actually being practised, distinct from the catalog above -- */
@@ -2072,6 +2129,38 @@ document.getElementById("p-repertoire").addEventListener("change", e => {
 });
 
 renderToday(); renderScales(); renderArps(); renderStudies(); renderTheory(); renderDrills(); renderRepertoire(); renderPlan();
+
+/* ---------- routing: the URL fragment is the page address ---------- */
+const ROUTE_IN = {
+  scales: sub => { const [id, form] = sub.split("/");
+                   return goToScale(DATA.minors.some(m => m.id === id) ? "minor" : "major", id, form); },
+  arps: goToArp,
+  studies: sub => goToStudy(sub.toUpperCase()),
+  theory: sub => {
+    const g = GROUP_SLUGS.indexOf(sub);
+    if (g < 0) return goToTopic(sub);
+    thGroup = g; renderTheory(); return true;
+  },
+  drills: goToDrill,
+  repertoire: goToPiece
+};
+function applyRoute(){
+  let raw = location.hash.slice(1);
+  try { raw = decodeURIComponent(raw); } catch(e){ /* keep the raw fragment */ }
+  const cut = raw.indexOf("/");
+  const tab = (cut < 0 ? raw : raw.slice(0, cut)) || "today";
+  const sub = cut < 0 ? "" : raw.slice(cut + 1);
+  if (!TAB_IDS.includes(tab)) return;          // an unknown address changes nothing
+  applyingRoute = true;
+  try {
+    showTab(tab);                              // right tab first, so a bad sub-route still lands
+    if (sub && ROUTE_IN[tab]) ROUTE_IN[tab](sub);
+    else window.scrollTo({top:0, behavior:"instant"});
+  } finally { applyingRoute = false; }
+}
+addEventListener("popstate", applyRoute);
+addEventListener("hashchange", applyRoute);
+applyRoute();
 </script>
 </body>
 </html>
