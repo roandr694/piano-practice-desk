@@ -416,6 +416,33 @@ h2.flash{background-color:var(--brass-soft);border-radius:4px;
   border:1px solid var(--rule);border-radius:5px;padding:2px 7px;cursor:pointer;color:var(--ink)}
 .usedby button:hover{border-color:var(--brass);color:var(--brass)}
 
+/* ---------- the tempo book ---------- */
+.tempobox{background:var(--sunk);border:1px solid var(--rule);border-radius:9px;
+  padding:13px 15px;margin:0 0 18px}
+.tbhd{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+.tbhd b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--brass)}
+.tbhd span{font-size:12.5px;color:var(--muted)}
+.tbnow{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.tbval{font-size:20px;font-weight:500}
+.tbnone,.tbmeta{font-size:12.5px;color:var(--muted);max-width:56ch}
+.tbgoal{margin:0 0 11px;font-size:12px;color:var(--muted)}
+.ttrack{margin:4px 0 16px;padding-bottom:13px}
+.ttbar{position:relative;height:8px;background:var(--surface);border:1px solid var(--rule);border-radius:5px}
+.ttfill{position:absolute;left:0;top:0;bottom:0;background:var(--felt);border-radius:4px 0 0 4px}
+.tttick{position:absolute;top:-4px;bottom:-4px;width:0}
+.tttick i{position:absolute;top:0;bottom:0;left:-1px;width:2px;background:var(--rule-strong);border-radius:1px}
+.tttick b{position:absolute;top:12px;left:0;transform:translateX(-50%);font-size:9.5px;
+  letter-spacing:.09em;color:var(--faint);font-weight:600}
+.ttyou{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;
+  background:var(--brass);border:2px solid var(--surface)}
+.tbhistrow{display:flex;align-items:flex-end;gap:11px;margin:0 0 12px}
+.tbhistcap{font-size:11.5px;color:var(--faint);padding-bottom:3px}
+.tbhist{display:flex;align-items:flex-end;gap:3px;height:28px}
+.tbhist i{display:block;width:8px;background:var(--brass-soft);border:1px solid var(--rule);
+  border-bottom:none;border-radius:2px 2px 0 0}
+.tbhist i.lastone{background:var(--brass);border-color:var(--brass)}
+.tbctl{align-items:center}
+
 .myrep{background:var(--sunk);border:1px solid var(--rule);border-radius:9px;padding:15px 16px;margin-bottom:22px}
 .myrephd{margin-bottom:11px}
 .myrephd h3{font-size:13px;font-weight:600;margin:0 0 2px}
@@ -630,6 +657,8 @@ function setBpm(v){
   bpmEl.textContent = bpm; slider.value = bpm;
   markEl.textContent = (marks.find(m=>bpm<m[0])||marks[7])[1];
   store.set("bpm", bpm);
+  /* the tempo book's "Log = NN" buttons quote the metronome, so keep them in step */
+  document.querySelectorAll(".logbpm").forEach(el => el.textContent = bpm);
 }
 function click(t, b){
   const o=ac.createOscillator(), g=ac.createGain();
@@ -847,6 +876,123 @@ function exportLogCSV(){
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
+
+/* -- the tempo book --------------------------------------------------------
+   The metronome, the three-times rule and the "Metronome targets" table all
+   assume you know what tempo you are actually at; until now nothing recorded
+   it. This does: one clean tempo per item per day, under keys that look like
+   "scale:C:major", "arp:Eb", "study:A6". Logging twice in one day replaces
+   that day's entry, so a mistap is correctable. It lives under pd_tempo, so
+   the existing backup/restore code carries it between devices for free. */
+const TEMPO_LO = 40, TEMPO_HI = 208, TEMPO_KEEP = 60;
+const TEMPO_ROW = {major: 0, minor: 1, arp: 3};   // rows of DATA.targets, by kind
+function tempoAll(){
+  const t = store.get("tempo", {});
+  return (t && typeof t === "object" && !Array.isArray(t)) ? t : {};
+}
+function tempoLog(key){ const l = tempoAll()[key]; return Array.isArray(l) ? l : []; }
+function tempoLast(key){ const l = tempoLog(key); return l.length ? l[l.length-1] : null; }
+function tempoBest(key){ return tempoLog(key).reduce((a,e)=>Math.max(a, (e&&e.b)||0), 0); }
+function logTempo(key, b){
+  b = Math.round(Number(b));
+  if (!isFinite(b)) return;
+  b = Math.max(TEMPO_LO, Math.min(TEMPO_HI, b));
+  const all = tempoAll();
+  const list = (Array.isArray(all[key]) ? all[key] : []).filter(e => e && e.d !== isoDay());
+  list.push({d: isoDay(), b});
+  list.sort((x,y) => x.d < y.d ? -1 : x.d > y.d ? 1 : 0);
+  all[key] = list.slice(-TEMPO_KEEP);
+  store.set("tempo", all);
+}
+function clearTempo(key){ const all = tempoAll(); delete all[key]; store.set("tempo", all); }
+function tempoWhen(iso){
+  const n = Math.round((new Date(isoDay()+"T12:00") - new Date(iso+"T12:00")) / 86400000);
+  if (n <= 0) return "today";
+  if (n === 1) return "yesterday";
+  if (n < 14) return n + " days ago";
+  return new Date(iso+"T12:00").toLocaleDateString(undefined, {month:"short", day:"numeric"});
+}
+/* the four examination targets for a row of DATA.targets, skipping levels it leaves blank */
+function tempoLevels(rowIdx){
+  const row = DATA.targets[rowIdx];
+  if (!row) return null;
+  const out = [];
+  ["I","II","III","IV"].forEach((l,i) => { if (row[i+1]) out.push([l, row[i+1]]); });
+  return out.length ? out : null;
+}
+function tempoTrackHTML(levels, best){
+  const top = Math.max(levels[levels.length-1][1], best);
+  const hi = top + Math.max(6, Math.round(top * 0.06));
+  const pct = v => Math.max(0, Math.min(100, ((v - TEMPO_LO) / (hi - TEMPO_LO)) * 100));
+  const lbl = "Targets: " + levels.map(([l,v]) => "Level " + l + " at " + v).join(", ")
+    + " beats per minute. " + (best ? "Your best so far: " + best + "." : "Nothing logged yet.");
+  return `<div class="ttrack" role="img" aria-label="${escAttr(lbl)}"><div class="ttbar">
+    ${best ? `<span class="ttfill" style="width:${pct(best).toFixed(1)}%"></span>` : ""}
+    ${levels.map(([l,v]) => `<span class="tttick" style="left:${pct(v).toFixed(1)}%"><i></i><b>${l}</b></span>`).join("")}
+    ${best ? `<span class="ttyou" style="left:${pct(best).toFixed(1)}%"></span>` : ""}
+  </div></div>`;
+}
+function tempoGoalTxt(levels, best){
+  const next = levels.find(([,v]) => best < v);
+  if (!next) return `Past the Level ${levels[levels.length-1][0]} target (♩ = ${levels[levels.length-1][1]}).`;
+  const done = levels.filter(([,v]) => best >= v).pop();
+  return (done ? `Level ${done[0]} target met. ` : "")
+    + `Next: Level ${next[0]} at ♩ = ${next[1]}.`;
+}
+function tempoHistHTML(key){
+  const l = tempoLog(key);
+  if (l.length < 2) return "";
+  const recent = l.slice(-12);
+  const vals = recent.map(e => e.b);
+  const top = Math.max.apply(null, vals), flo = Math.min.apply(null, vals) - 6;
+  const bars = recent.map((e,i) => {
+    const h = Math.round(5 + 22 * ((e.b - flo) / Math.max(1, top - flo)));
+    return `<i class="${i===recent.length-1?"lastone":""}" style="height:${h}px"></i>`;
+  }).join("");
+  const lbl = "Recent tempos: " + recent.map(e => `${e.d}, ${e.b}`).join("; ");
+  return `<div class="tbhistrow"><div class="tbhist" role="img" aria-label="${escAttr(lbl)}">${bars}</div>
+    <span class="tbhistcap">${recent.length} logs \u00b7 \u2669 = ${vals[0]} \u2192 ${vals[vals.length-1]}</span></div>`;
+}
+/* the box carries everything it needs to repaint itself, so logging a tempo never
+   forces a re-render of the page around it (which would collapse an open study) */
+function tempoBoxHTML(key, what, rowIdx){
+  return `<div class="tempobox" data-tempokey="${escAttr(key)}" data-tempowhat="${escAttr(what)}"
+    data-temporow="${rowIdx==null ? -1 : rowIdx}">${tempoBoxInner(key, what, rowIdx)}</div>`;
+}
+function tempoBoxInner(key, what, rowIdx){
+  const last = tempoLast(key), best = tempoBest(key);
+  const levels = rowIdx >= 0 ? tempoLevels(rowIdx) : null;
+  return `
+  <div class="tbhd"><b>Your tempo</b><span>${esc(what)}</span></div>
+  <div class="tbnow">${last
+    ? `<span class="tbval mono">♩ = ${last.b}</span>
+       <span class="tbmeta">logged ${esc(tempoWhen(last.d))}${best > last.b ? ` · best so far ♩ = ${best}` : ""}</span>`
+    : `<span class="tbnone">Nothing logged yet — set the metronome to the fastest tempo you can play
+       this cleanly three times running, then log it.</span>`}</div>
+  ${levels ? tempoTrackHTML(levels, best) + `<p class="tbgoal">${esc(tempoGoalTxt(levels, best))}</p>` : ""}
+  ${tempoHistHTML(key)}
+  <div class="tbctl rctl">
+    <button type="button" class="primary" data-logtempo="1">Log ♩ = <span class="logbpm">${bpm}</span></button>
+    ${last ? `<button type="button" data-settempo="${last.b}">Set the metronome to ${last.b}</button>` : ""}
+    ${last ? `<button type="button" class="scorereset" style="margin-left:0" data-cleartempo="1">Clear this record</button>` : ""}
+  </div>`;
+}
+function paintTempo(key){
+  document.querySelectorAll(".tempobox").forEach(b => {
+    if (b.dataset.tempokey !== key) return;
+    b.innerHTML = tempoBoxInner(b.dataset.tempokey, b.dataset.tempowhat, +b.dataset.temporow);
+  });
+}
+/* one delegated listener, so every panel that shows a box gets the behaviour for free */
+document.addEventListener("click", e => {
+  const box = e.target.closest(".tempobox");
+  if (!box) return;
+  const key = box.dataset.tempokey;
+  const s = e.target.closest("button[data-settempo]");
+  if (s){ setBpm(+s.dataset.settempo); return; }
+  if (e.target.closest("button[data-logtempo]")){ logTempo(key, bpm); paintTempo(key); renderPlan(); return; }
+  if (e.target.closest("button[data-cleartempo]")){ clearTempo(key); paintTempo(key); renderPlan(); }
+});
 
 /* -- the runner -- */
 let run = store.get("run", null);
@@ -1109,6 +1255,8 @@ function renderScales(){
   <div class="rctl playrow" style="margin:-6px 0 16px">
     <button type="button" class="primary" data-scaleplay="1">▶ Play this scale</button>
   </div>
+  ${tempoBoxHTML("scale:"+k.id+":"+scaleForm, title + " \u00b7 hands together, two octaves",
+                 isMaj ? TEMPO_ROW.major : TEMPO_ROW.minor)}
   <dl class="fingtab">
     <dt>Notes</dt><dd style="font-family:inherit;letter-spacing:0">${esc(notes)}</dd>
     <dt>Right hand</dt><dd>${k.rh}</dd>
@@ -1174,6 +1322,7 @@ function renderArps(){
   <div class="rctl playrow" style="margin:-6px 0 16px">
     <button type="button" class="primary" data-arpplay="1">\u25b6 Play this arpeggio</button>
   </div>
+  ${tempoBoxHTML("arp:"+k.id, k.name + " arpeggio \u00b7 root position, two octaves", TEMPO_ROW.arp)}
   <div class="rulebox"><b>Standard fingering \u2014 the same in every key</b>
     RH <span class="mono">1 2 3 \u00b7 1 2 3 \u00b7 5</span> &nbsp; LH <span class="mono">5 3 2 1 \u00b7 3 2 1</span>.
     The thumb falls only on the root, so root-position arpeggios need far less memory work than
@@ -1245,6 +1394,8 @@ function renderStudies(){
       <p class="how"><b>How:</b> ${esc(s.how)}</p>
       ${plate(s.plate, "", "")}
       ${usedByHTML(piecesForStudy(s.code))}
+      <div style="height:14px"></div>
+      ${tempoBoxHTML("study:"+s.code, s.code + " \u00b7 " + s.t, -1)}
     </div>
   </details>`).join("")}`
   : `<p class="note">No studies match that combination &mdash; try a wider level range.</p>`}`;
