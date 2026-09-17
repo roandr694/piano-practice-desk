@@ -442,6 +442,13 @@ h2.flash{background-color:var(--brass-soft);border-radius:4px;
   border-bottom:none;border-radius:2px 2px 0 0}
 .tbhist i.lastone{background:var(--brass);border-color:var(--brass)}
 .tbctl{align-items:center}
+.tempotable td.n,.tempotable th.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+.tempotable tr.tgroup td{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--brass);padding-top:14px}
+.tempogo{background:none;border:none;padding:0;cursor:pointer;color:var(--ink);
+  text-align:left;text-decoration:underline;text-decoration-color:var(--faint)}
+.tempogo:hover{color:var(--brass);text-decoration-color:var(--brass)}
+.tgoal{font-size:11.5px;color:var(--faint);margin-top:1px}
 
 .myrep{background:var(--sunk);border:1px solid var(--rule);border-radius:9px;padding:15px 16px;margin-bottom:22px}
 .myrephd{margin-bottom:11px}
@@ -863,18 +870,21 @@ function renderHistory(){
     </div>
   </details>`;
 }
-function exportLogCSV(){
-  const log = store.get("log", []);
-  if (!log.length) return;
+function downloadCSV(rows, filename){
   const escCsv = v => { const s = String(v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-  const rows = [["Date","Session length (min)","Minutes practised"], ...log.map(x=>[x.d, x.r, x.m])];
   const csv = rows.map(r => r.map(escCsv).join(",")).join("\r\n");
   const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "practice-desk-log.csv";
+  a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
+}
+function exportLogCSV(){
+  const log = store.get("log", []);
+  if (!log.length) return;
+  downloadCSV([["Date","Session length (min)","Minutes practised"], ...log.map(x=>[x.d, x.r, x.m])],
+              "practice-desk-log.csv");
 }
 
 /* -- the tempo book --------------------------------------------------------
@@ -956,7 +966,7 @@ function tempoHistHTML(key){
 /* the box carries everything it needs to repaint itself, so logging a tempo never
    forces a re-render of the page around it (which would collapse an open study) */
 function tempoBoxHTML(key, what, rowIdx){
-  return `<div class="tempobox" data-tempokey="${escAttr(key)}" data-tempowhat="${escAttr(what)}"
+  return `<div class="tempobox" aria-live="polite" data-tempokey="${escAttr(key)}" data-tempowhat="${escAttr(what)}"
     data-temporow="${rowIdx==null ? -1 : rowIdx}">${tempoBoxInner(key, what, rowIdx)}</div>`;
 }
 function tempoBoxInner(key, what, rowIdx){
@@ -977,10 +987,100 @@ function tempoBoxInner(key, what, rowIdx){
     ${last ? `<button type="button" class="scorereset" style="margin-left:0" data-cleartempo="1">Clear this record</button>` : ""}
   </div>`;
 }
+/* -- reading a tempo key back: what it names, and how to get to it -- */
+function tempoItem(key){
+  const p = String(key).split(":");
+  if (p[0] === "scale"){
+    const isMaj = p[2] === "major";
+    const k = (isMaj ? DATA.majors : DATA.minors).find(x => x.id === p[1]);
+    if (!k) return null;
+    return {order: isMaj ? 0 : 1, group: isMaj ? "Scales — major" : "Scales — minor",
+            name: isMaj ? k.name : k.name.replace(" minor", " " + p[2] + " minor"),
+            row: isMaj ? TEMPO_ROW.major : TEMPO_ROW.minor};
+  }
+  if (p[0] === "arp"){
+    const k = DATA.majors.find(x => x.id === p[1]);
+    return k ? {order: 2, group: "Arpeggios", name: k.name + " arpeggio", row: TEMPO_ROW.arp} : null;
+  }
+  if (p[0] === "study"){
+    const st = DATA.studies.find(x => x.code === p[1]);
+    return st ? {order: 3, group: "Studies", name: st.code + " — " + st.t, row: -1} : null;
+  }
+  return null;
+}
+function tempoGo(key){
+  const p = String(key).split(":");
+  if (p[0] === "scale") return goToScale(p[2] === "major" ? "major" : "minor", p[1], p[2]);
+  if (p[0] === "arp") return goToArp(p[1]);
+  if (p[0] === "study") return goToStudy(p[1]);
+  return false;
+}
+/* every logged item, grouped the way the targets table is, newest first inside a group */
+function tempoRows(){
+  const all = tempoAll();
+  const rows = [];
+  Object.keys(all).forEach(key => {
+    const l = all[key];
+    if (!Array.isArray(l) || !l.length) return;
+    const info = tempoItem(key);
+    if (!info) return;                       // a key for something no longer in DATA
+    rows.push(Object.assign({key, last: l[l.length-1],
+      best: l.reduce((a,e) => Math.max(a, (e&&e.b)||0), 0)}, info));
+  });
+  rows.sort((a,b) => a.order - b.order
+    || (a.last.d < b.last.d ? 1 : a.last.d > b.last.d ? -1 : 0)
+    || a.name.localeCompare(b.name));
+  return rows;
+}
+function tempoOverviewHTML(){
+  const rows = tempoRows();
+  if (!rows.length) return `
+  <h2 id="sec-yourtempos">Your tempos</h2>
+  <p class="note">Nothing logged yet. Every scale, arpeggio and study has a <b>Your tempo</b> box on its
+  own page: set the metronome in the left rail to the fastest tempo you can play it cleanly three times
+  running, press <b>Log</b>, and it will appear here — the other side of the table above.</p>`;
+  let group = "";
+  const body = rows.map(r => {
+    let hd = "";
+    if (r.group !== group){ group = r.group; hd = `<tr class="tgroup"><td colspan="4">${esc(group)}</td></tr>`; }
+    const goal = r.row >= 0 ? tempoGoalTxt(tempoLevels(r.row), r.best) : "";
+    return hd + `<tr>
+      <td><button type="button" class="tempogo" data-gotempo="${escAttr(r.key)}">${esc(r.name)}</button>
+        ${goal ? `<div class="tgoal">${esc(goal)}</div>` : ""}</td>
+      <td class="n mono">♩=${r.last.b}</td><td class="n mono">♩=${r.best}</td>
+      <td class="n">${esc(tempoWhen(r.last.d))}</td></tr>`;
+  }).join("");
+  return `
+  <h2 id="sec-yourtempos">Your tempos</h2>
+  <p class="note">What you have actually logged — the other side of the table above. Select a name to
+  open it. ${rows.length} item${rows.length===1?"":"s"} logged.</p>
+  <div class="tw"><table class="tempotable"><thead><tr><th>Item</th><th class="n">Latest</th>
+    <th class="n">Best</th><th class="n">Logged</th></tr></thead><tbody>${body}</tbody></table></div>
+  <div class="rctl" style="margin:11px 0 26px"><button type="button" class="scorereset"
+    style="margin-left:0" data-exporttempo>Export tempos (CSV)</button></div>`;
+}
+function exportTempoCSV(){
+  const all = tempoAll();
+  const rows = [["Item","Key","Date","Tempo (BPM)"]];
+  tempoRows().forEach(r => (all[r.key]||[]).forEach(e => rows.push([r.name, r.key, e.d, e.b])));
+  if (rows.length === 1) return;
+  downloadCSV(rows, "practice-desk-tempos.csv");
+}
 function paintTempo(key){
+  /* the button that was just pressed is about to be replaced, so note which one it was
+     and hand focus to its successor — otherwise logging from the keyboard drops you on <body> */
+  const act = document.activeElement;
+  const from = act && act.closest ? act.closest(".tempobox") : null;
+  const attr = from && act.dataset
+    ? (act.dataset.logtempo ? "data-logtempo"
+      : act.dataset.cleartempo ? "data-cleartempo"
+      : act.dataset.settempo ? "data-settempo" : "") : "";
   document.querySelectorAll(".tempobox").forEach(b => {
     if (b.dataset.tempokey !== key) return;
     b.innerHTML = tempoBoxInner(b.dataset.tempokey, b.dataset.tempowhat, +b.dataset.temporow);
+    if (b !== from || !attr) return;
+    const next = b.querySelector("button[" + attr + "]") || b.querySelector("button");
+    if (next) next.focus();
   });
 }
 /* one delegated listener, so every panel that shows a box gets the behaviour for free */
@@ -1956,6 +2056,7 @@ function renderPlan(){
   <div class="tw"><table><thead><tr><th>Material</th>${lv.map(l=>`<th class="n">${l}</th>`).join("")}</tr></thead>
   <tbody>${DATA.targets.map(t=>`<tr><td>${esc(t[0])}</td>${t.slice(1).map(v=>
     `<td class="n">${v?"\u2669="+v:"\u2014"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+  ${tempoOverviewHTML()}
   <h2 id="sec-endofmonth">End-of-month check${curMonth ? ` &mdash; month ${curMonth}` : ""}</h2>
   <p class="note">Ten minutes on the last day of the month, with a recording device. Anything not
   yet solid carries into next month.${curMonth ? "" : " Set a current month above and each month gets its own checklist &mdash; ticking one month's boxes won't leave next month's pre-checked."}</p>
@@ -1984,6 +2085,12 @@ function renderPlan(){
   });
   document.querySelectorAll("#p-plan button[data-setmonth]").forEach(b=>{
     b.onclick = () => setCurMonth(+b.dataset.setmonth);
+  });
+  document.querySelectorAll("#p-plan button[data-gotempo]").forEach(b=>{
+    b.onclick = () => tempoGo(b.dataset.gotempo);
+  });
+  document.querySelectorAll("#p-plan button[data-exporttempo]").forEach(b=>{
+    b.onclick = exportTempoCSV;
   });
 }
 
@@ -2344,6 +2451,7 @@ const SECTIONS = [
   ["plan","sec-monthly","The monthly cycle","The plan"],
   ["plan","sec-curriculum","The eighteen-month curriculum","The plan"],
   ["plan","sec-targets","Metronome targets","The plan"],
+  ["plan","sec-yourtempos","Your tempos","The plan"],
   ["plan","sec-endofmonth","End-of-month check","The plan"]
 ];
 function goToSection(tab, anchor){
