@@ -463,22 +463,37 @@ h2.flash{background-color:var(--brass-soft);border-radius:4px;
 .myrepform button{background:var(--felt);border:1px solid var(--felt);color:var(--on-felt);font-weight:600;
   border-radius:6px;padding:7px 16px;font-size:13.5px;cursor:pointer;flex:0 0 auto}
 .myreplist{display:flex;flex-direction:column;gap:8px}
-.mritem{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;
-  background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:10px 12px}
-.mrstatus{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;
-  padding:5px 10px;border:1px solid var(--rule);background:var(--sunk);color:var(--muted);cursor:pointer;white-space:nowrap}
-.mrstatus:hover{border-color:var(--rule-strong)}
-.mrstatus.learning{border-color:var(--brass);color:var(--brass)}
-.mrstatus.polishing{border-color:var(--felt);color:var(--felt)}
-.mrbody{min-width:0}
-.mrhd{font-size:14px;margin-bottom:5px}
+.mritem{background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:9px 12px}
+.mritem>summary{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline;cursor:pointer;list-style:none}
+.mritem>summary::-webkit-details-marker{display:none}
+.mritem>summary::before{content:"\25B8";color:var(--brass);font-size:11px;flex:0 0 11px}
+.mritem[open]>summary::before{content:"\25BE"}
+.mritem.flash{background-color:var(--brass-soft)}
+.mrsum{display:flex;flex-wrap:wrap;gap:3px 10px;align-items:baseline;min-width:0;flex:1 1 0}
+.mrst{font-size:10px;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;
+  padding:3px 9px;border:1px solid var(--rule);color:var(--muted);white-space:nowrap}
+.mrst.learning{border-color:var(--brass);color:var(--brass)}
+.mrst.polishing{border-color:var(--felt);color:var(--felt)}
+.mrhd{font-size:14px;min-width:0}
 .mrhd b{font-weight:600}
 .mrcomp{color:var(--faint);font-size:12px}
-.mrnote{width:100%;background:var(--sunk);border:1px solid var(--rule);border-radius:6px;
-  padding:5px 9px;font:inherit;font-size:12.5px;color:var(--ink)}
+.mrtempo{font-size:12.5px;color:var(--brass);white-space:nowrap}
+.mrtempo:empty{display:none}
+.mrnotepv{flex:1 1 100%;font-size:12px;color:var(--faint);padding-left:21px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrnotepv:empty,.mritem[open] .mrnotepv{display:none}
+.mrbody{padding:12px 0 2px 21px}
+.mrbody .tempobox{margin-bottom:12px}
+.mrnotelbl{display:block;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:13px}
+.mrnote{display:block;width:100%;margin-top:4px;background:var(--sunk);border:1px solid var(--rule);
+  border-radius:6px;padding:6px 9px;font:inherit;font-size:12.5px;color:var(--ink);
+  letter-spacing:normal;text-transform:none}
 .mrnote:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
-.mrremove{background:none;border:1px solid var(--rule);border-radius:6px;color:var(--faint);
-  width:26px;height:26px;cursor:pointer;line-height:1}
+.mrctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.mrstatus,.mrremove{font-size:12px;border:1px solid var(--rule);border-radius:6px;
+  padding:5px 11px;background:var(--surface);color:var(--muted);cursor:pointer}
+.mrstatus:hover{border-color:var(--rule-strong);color:var(--ink)}
 .mrremove:hover{border-color:var(--brass);color:var(--brass)}
 .repchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .repchip{font-size:11px;border-radius:999px;padding:3px 9px;border:1px solid var(--rule);color:var(--muted)}
@@ -1006,6 +1021,12 @@ function tempoItem(key){
     const st = DATA.studies.find(x => x.code === p[1]);
     return st ? {order: 3, group: "Studies", name: st.code + " — " + st.t, row: -1} : null;
   }
+  if (p[0] === "myrep"){
+    /* a user's own piece: it lives in pd_myrep, not DATA, and has no examination target */
+    const r = myRep().find(x => x.id === p[1]);
+    return r ? {order: 4, group: "My repertoire",
+                name: r.title + (r.composer ? " — " + r.composer : ""), row: -1} : null;
+  }
   return null;
 }
 function tempoGo(key){
@@ -1013,6 +1034,7 @@ function tempoGo(key){
   if (p[0] === "scale") return goToScale(p[2] === "major" ? "major" : "minor", p[1], p[2]);
   if (p[0] === "arp") return goToArp(p[1]);
   if (p[0] === "study") return goToStudy(p[1]);
+  if (p[0] === "myrep") return goToMyRep(p[1]);
   return false;
 }
 /* every logged item, grouped the way the targets table is, newest first inside a group */
@@ -1036,9 +1058,9 @@ function tempoOverviewHTML(){
   const rows = tempoRows();
   if (!rows.length) return `
   <h2 id="sec-yourtempos">Your tempos</h2>
-  <p class="note">Nothing logged yet. Every scale, arpeggio and study has a <b>Your tempo</b> box on its
-  own page: set the metronome in the left rail to the fastest tempo you can play it cleanly three times
-  running, press <b>Log</b>, and it will appear here — the other side of the table above.</p>`;
+  <p class="note">Nothing logged yet. Every scale, arpeggio, study and tracked piece has a <b>Your tempo</b>
+  box on its own page: set the metronome in the left rail to the fastest tempo you can play it cleanly three
+  times running, press <b>Log</b>, and it will appear here — the other side of the table above.</p>`;
   let group = "";
   const body = rows.map(r => {
     let hd = "";
@@ -1081,6 +1103,11 @@ function paintTempo(key){
     if (b !== from || !attr) return;
     const next = b.querySelector("button[" + attr + "]") || b.querySelector("button");
     if (next) next.focus();
+  });
+  /* anything showing the last tempo at a glance elsewhere on the page follows along */
+  const last = tempoLast(key);
+  document.querySelectorAll("[data-tempochip]").forEach(el => {
+    if (el.dataset.tempochip === key) el.textContent = last ? "♩ = " + last.b : "";
   });
 }
 /* one delegated listener, so every panel that shows a box gets the behaviour for free */
@@ -2322,19 +2349,51 @@ function renderMyRep(){
       </select>
       <button type="submit" class="primary">Add</button>
     </form>
-    ${list.length ? `<div class="myreplist">${list.map(r => `
-      <div class="mritem">
-        <button type="button" class="mrstatus ${r.status}" data-mrstatus="${r.id}"
-          aria-label="Toggle status, currently ${r.status==="learning"?"learning":"polishing"}">${r.status==="learning"?"Learning":"Polishing"}</button>
+    ${list.length ? `<div class="myreplist">${list.map(r => {
+      const key = "myrep:" + r.id, last = tempoLast(key);
+      return `
+      <details class="mritem" id="mritem-${r.id}">
+        <summary>
+          <span class="mrsum">
+            <span class="mrst ${r.status}">${r.status==="learning"?"Learning":"Polishing"}</span>
+            <span class="mrhd"><b>${esc(r.title)}</b>${r.composer ? ` <span class="mrcomp">${esc(r.composer)}</span>` : ""}</span>
+            <span class="mrtempo mono" data-tempochip="${escAttr(key)}">${last ? `♩ = ${last.b}` : ""}</span>
+          </span>
+          <span class="mrnotepv">${esc(r.note||"")}</span>
+        </summary>
         <div class="mrbody">
-          <div class="mrhd"><b>${esc(r.title)}</b>${r.composer ? ` <span class="mrcomp">${esc(r.composer)}</span>` : ""}</div>
-          <input type="text" class="mrnote" data-mrnote="${r.id}" value="${escAttr(r.note||"")}"
-            placeholder="Where you stopped, a trouble spot…" maxlength="200">
+          <label class="mrnotelbl">Note
+            <input type="text" class="mrnote" data-mrnote="${r.id}" value="${escAttr(r.note||"")}"
+              placeholder="Where you stopped, a trouble spot…" maxlength="200"></label>
+          ${tempoBoxHTML(key, r.title, -1)}
+          <div class="mrctl">
+            <button type="button" class="mrstatus" data-mrstatus="${r.id}">Mark as ${r.status==="learning"?"polishing":"learning"}</button>
+            <button type="button" class="mrremove" data-mrremove="${r.id}">Remove from my repertoire</button>
+          </div>
         </div>
-        <button type="button" class="mrremove" data-mrremove="${r.id}" aria-label="Remove ${escAttr(r.title)} from my repertoire">✕</button>
-      </div>`).join("")}</div>`
+      </details>`}).join("")}</div>`
       : `<p class="note">Nothing tracked yet — add a piece above, or use “+ Track this piece” on any entry below.</p>`}
   </div>`;
+}
+/* re-render the whole Repertoire panel without collapsing the pieces you had open */
+function renderMyRepIn(){
+  const open = Array.prototype.map.call(
+    document.querySelectorAll("#p-repertoire details.mritem[open]"), d => d.id);
+  renderRepertoire();
+  open.forEach(id => { const d = document.getElementById(id); if (d) d.open = true; });
+}
+function goToMyRep(id){
+  if (!myRep().some(r => r.id === id)) return false;
+  showTab("repertoire");
+  setTimeout(() => {
+    const el = document.getElementById("mritem-" + id);
+    if (!el) return;
+    el.open = true;
+    el.scrollIntoView({behavior:"smooth", block:"center"});
+    el.classList.add("flash");
+    setTimeout(() => el.classList.remove("flash"), 1600);
+  });
+  return true;
 }
 
 let repLevel = "All";
@@ -2401,15 +2460,30 @@ document.getElementById("p-repertoire").addEventListener("click", e => {
   const gk = e.target.closest("button[data-goscale]");
   if (gk){ const [kind,id] = gk.dataset.goscale.split(":"); goToScale(kind,id); return; }
   const ar = e.target.closest("button[data-addrep-title]");
-  if (ar){ addMyRepItem(ar.dataset.addrepTitle, ar.dataset.addrepComposer, "learning"); renderRepertoire(); renderToday(); return; }
+  if (ar){ addMyRepItem(ar.dataset.addrepTitle, ar.dataset.addrepComposer, "learning"); renderMyRepIn(); renderToday(); return; }
   const ms = e.target.closest("button[data-mrstatus]");
   if (ms){
     const list = myRep(); const item = list.find(r=>r.id===ms.dataset.mrstatus);
-    if (item){ item.status = item.status==="learning" ? "polishing" : "learning"; setMyRep(list); renderRepertoire(); renderToday(); }
+    if (item){
+      item.status = item.status==="learning" ? "polishing" : "learning"; setMyRep(list);
+      renderMyRepIn(); renderToday();
+      /* the button that was pressed has just been replaced — hand focus to its successor */
+      const next = document.querySelector('button[data-mrstatus="' + item.id + '"]');
+      if (next) next.focus();
+    }
     return;
   }
   const mr = e.target.closest("button[data-mrremove]");
-  if (mr){ setMyRep(myRep().filter(r=>r.id!==mr.dataset.mrremove)); renderRepertoire(); renderToday(); }
+  if (mr){
+    const id = mr.dataset.mrremove, item = myRep().find(r=>r.id===id);
+    const logs = tempoLog("myrep:" + id).length;
+    /* the id is generated and never reused, so a left-behind tempo record could never be
+       reached again — but it is real work, so say so before throwing it away */
+    if (logs && !confirm("Remove “" + (item ? item.title : "this piece")
+      + "”? Its tempo record (" + logs + " log" + (logs===1?"":"s") + ") goes with it.")) return;
+    clearTempo("myrep:" + id);
+    setMyRep(myRep().filter(r=>r.id!==id)); renderMyRepIn(); renderToday(); renderPlan();
+  }
 });
 document.getElementById("p-repertoire").addEventListener("submit", e => {
   const f = e.target.closest("#myrepform"); if (!f) return;
@@ -2419,12 +2493,16 @@ document.getElementById("p-repertoire").addEventListener("submit", e => {
   const status = document.getElementById("mrStatus").value;
   if (!title.trim()) return;
   addMyRepItem(title, composer, status);
-  renderRepertoire(); renderToday();
+  renderMyRepIn(); renderToday();
 });
 document.getElementById("p-repertoire").addEventListener("change", e => {
   const n = e.target.closest("input[data-mrnote]"); if (!n) return;
   const list = myRep(); const item = list.find(r=>r.id===n.dataset.mrnote);
-  if (item){ item.note = n.value.slice(0,200); setMyRep(list); }
+  if (item){
+    item.note = n.value.slice(0,200); setMyRep(list);
+    const card = n.closest("details.mritem"), pv = card && card.querySelector(".mrnotepv");
+    if (pv) pv.textContent = item.note;      // the collapsed summary shows it; no re-render needed
+  }
 });
 
 renderToday(); renderScales(); renderArps(); renderStudies(); renderTheory(); renderDrills(); renderRepertoire(); renderPlan();
