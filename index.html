@@ -479,6 +479,14 @@ h2.flash{background-color:var(--brass-soft);border-radius:4px;
 .mrcomp{color:var(--faint);font-size:12px}
 .mrtempo{font-size:12.5px;color:var(--brass);white-space:nowrap}
 .mrtempo:empty{display:none}
+.mrlast{font-size:11.5px;color:var(--faint);white-space:nowrap}
+.mrlast.due{color:var(--warn)}
+.mrplayrow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:13px}
+.mrplayed{font:inherit;font-size:12px;border:1px solid var(--rule);border-radius:6px;padding:5px 11px;
+  background:var(--surface);color:var(--muted);cursor:pointer}
+.mrplayed:hover{border-color:var(--rule-strong);color:var(--ink)}
+.mrplayed[aria-pressed="true"]{background:var(--felt-soft);border-color:var(--felt);color:var(--felt)}
+.mrplaycount{font-size:11.5px;color:var(--faint)}
 .mrnotepv{flex:1 1 100%;font-size:12px;color:var(--faint);padding-left:21px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mrnotepv:empty,.mritem[open] .mrnotepv{display:none}
@@ -496,9 +504,17 @@ h2.flash{background-color:var(--brass-soft);border-radius:4px;
 .mrstatus:hover{border-color:var(--rule-strong);color:var(--ink)}
 .mrremove:hover{border-color:var(--brass);color:var(--brass)}
 .repchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-.repchip{font-size:11px;border-radius:999px;padding:3px 9px;border:1px solid var(--rule);color:var(--muted)}
+.repchip{font:inherit;font-size:11px;border-radius:999px;padding:3px 9px;border:1px solid var(--rule);
+  color:var(--muted);background:var(--bg);cursor:pointer;display:inline-flex;gap:7px;align-items:baseline;
+  text-align:left}
+.repchip:hover{background:var(--sunk)}
 .repchip.learning{border-color:var(--brass);color:var(--brass)}
 .repchip.polishing{border-color:var(--felt);color:var(--felt)}
+.repchip[aria-pressed="true"]{background:var(--felt-soft);border-color:var(--felt);color:var(--felt)}
+.rcwhen{font-size:10px;color:var(--faint);white-space:nowrap;flex:0 0 auto}
+.repchip.due .rcwhen{color:var(--warn)}
+.repchip[aria-pressed="true"] .rcwhen{color:var(--felt)}
+.rchint{margin:6px 0 0;font-size:11px;color:var(--faint)}
 
 @media (max-width:900px){
   .shell{grid-template-columns:minmax(0,1fr)}
@@ -930,8 +946,10 @@ function logTempo(key, b){
   store.set("tempo", all);
 }
 function clearTempo(key){ const all = tempoAll(); delete all[key]; store.set("tempo", all); }
+const daysSince = iso =>
+  Math.round((new Date(isoDay()+"T12:00") - new Date(iso+"T12:00")) / 86400000);
 function tempoWhen(iso){
-  const n = Math.round((new Date(isoDay()+"T12:00") - new Date(iso+"T12:00")) / 86400000);
+  const n = daysSince(iso);
   if (n <= 0) return "today";
   if (n === 1) return "yesterday";
   if (n < 14) return n + " days ago";
@@ -1117,7 +1135,12 @@ document.addEventListener("click", e => {
   const key = box.dataset.tempokey;
   const s = e.target.closest("button[data-settempo]");
   if (s){ setBpm(+s.dataset.settempo); return; }
-  if (e.target.closest("button[data-logtempo]")){ logTempo(key, bpm); paintTempo(key); renderPlan(); return; }
+  if (e.target.closest("button[data-logtempo]")){
+    logTempo(key, bpm); paintTempo(key); renderPlan();
+    /* you cannot log a tempo for a piece without having played it */
+    if (key.indexOf("myrep:") === 0 && markPlayed(key.slice(6))) paintPlayed(key.slice(6));
+    return;
+  }
   if (e.target.closest("button[data-cleartempo]")){ clearTempo(key); paintTempo(key); renderPlan(); }
 });
 
@@ -1251,13 +1274,19 @@ function renderToday(){
     <div>
       <h3 class="sub">The session &middot; ${total} minutes</h3>
       <div class="blocks">${blocks.map((b,i)=>{
-        const rep = b[1]==="Repertoire" ? myRep() : [];
+        const rep = b[1]==="Repertoire" ? byStaleness() : [];
         return `
         <label class="block${done.includes(i)?" done":""}"${run&&run.i===i?' style="border-color:var(--brass)"':""}>
           <span class="min">${b[0]}<small>min</small></span>
           <span><b>${esc(b[1])}</b><p>${esc(b[2])}</p>
-            ${rep.length ? `<div class="repchips">${rep.map(r=>
-              `<span class="repchip ${r.status}">${r.status==="learning"?"Learning":"Polishing"} &middot; ${esc(r.title)}</span>`).join("")}</div>` : ""}
+            ${rep.length ? `<div class="repchips">${rep.map(r=>{
+              const on = playedOn(r);
+              return `<button type="button" class="repchip ${r.status}${isDue(r) ? " due" : ""}"
+                data-mrplay="${r.id}" aria-pressed="${on}"
+                title="${on ? "Played today &mdash; select to undo" : "Mark as played today"}"
+                >${r.status==="learning"?"Learning":"Polishing"} &middot; ${esc(r.title)}<span class="rcwhen"
+                  data-playchip="${r.id}">${esc(playedShort(r))}</span></button>`;}).join("")}</div>
+              <p class="rchint">Longest untouched first &mdash; select one once you have played it.</p>` : ""}
           </span>
           <input type="checkbox" data-i="${i}"${done.includes(i)?" checked":""} aria-label="Mark ${esc(b[1])} done">
         </label>`;
@@ -1329,6 +1358,13 @@ document.getElementById("p-today").addEventListener("click", e => {
   if (e.target.closest("[data-nextmonth]")){ setCurMonth(curMonth+1); return; }
   if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
   if (e.target.closest("[data-exportlog]")){ exportLogCSV(); return; }
+  const pl = e.target.closest("button[data-mrplay]");
+  if (pl){
+    /* the chip sits inside the block's <label>: without this the tap would also
+       tick the block's "done" checkbox */
+    e.preventDefault();
+    togglePlayed(pl.dataset.mrplay); paintPlayed(pl.dataset.mrplay);
+  }
 });
 document.getElementById("p-today").addEventListener("change", e => {
   const cb = e.target.closest("input[type=checkbox][data-i]"); if (!cb) return;
@@ -2322,8 +2358,83 @@ function goToPiece(slug){
 }
 
 /* -- my repertoire: the pieces actually being practised, distinct from the catalog above -- */
-function myRep(){ return store.get("myrep", []); }
+function myRep(){
+  const list = store.get("myrep", []);
+  if (!Array.isArray(list)) return [];
+  /* one-time backfill: pieces tracked before the play log existed get today as their
+     start date. It claims nothing about the past — it just gives staleness a floor. */
+  let filled = false;
+  list.forEach(r => { if (r && !r.added){ r.added = isoDay(); filled = true; } });
+  if (filled) setMyRep(list);
+  return list;
+}
 function setMyRep(list){ store.set("myrep", list); }
+
+/* -- which pieces have actually been played lately ------------------------------
+   A tempo log is a milestone; this is attendance. You play a piece most days and
+   record a tempo for it once a week, so the two answer different questions — and
+   "which piece have I not touched in nine days" is the one a self-teacher, with no
+   teacher keeping the list, loses track of first. Days live on the item itself in
+   pd_myrep, so backup/restore carries them with the piece they belong to. */
+const PLAY_KEEP = 180, PLAY_DUE = 3;
+const playedDays = r => Array.isArray(r && r.played) ? r.played : [];
+const lastPlayed = r => { const p = playedDays(r); return p.length ? p[p.length-1] : null; };
+function repItem(id){ return myRep().find(r => r.id === id) || null; }
+const playedOn = r => playedDays(r).includes(isoDay());     // for a piece already in hand
+const playedToday = id => playedOn(repItem(id));            // for one known only by id
+const playCountTxt = r => { const n = playedDays(r).length;
+  return n ? n + " day" + (n===1?"":"s") + " logged" : ""; };
+function setPlayedDays(id, days){
+  const list = myRep(), r = list.find(x => x.id === id);
+  if (!r) return false;
+  r.played = days.slice(-PLAY_KEEP);
+  setMyRep(list);
+  return true;
+}
+function togglePlayed(id){
+  const r = repItem(id); if (!r) return;
+  const d = isoDay(), p = playedDays(r);
+  setPlayedDays(id, p.includes(d) ? p.filter(x => x !== d) : p.concat(d).sort());
+}
+function markPlayed(id){                       // returns true only if it changed something
+  const r = repItem(id);
+  if (!r || playedDays(r).includes(isoDay())) return false;
+  return setPlayedDays(id, playedDays(r).concat(isoDay()).sort());
+}
+/* staleness counts from the last play, or from the day the piece was added if it has
+   never been played — never from nothing, so a piece added today is not "overdue" */
+const staleSince = r => lastPlayed(r) || (r && r.added) || null;
+const staleDays = r => { const s = staleSince(r); return s ? Math.max(0, daysSince(s)) : 0; };
+const isDue = r => staleDays(r) >= PLAY_DUE;
+const playedShort = r => { const lp = lastPlayed(r); return lp ? tempoWhen(lp) : "not yet"; };
+const playedFull = r => { const lp = lastPlayed(r); return lp ? "played " + tempoWhen(lp) : "not played yet"; };
+const byStaleness = () => myRep().slice().sort((a,b) => staleDays(b) - staleDays(a));
+/* the chips and the card summary show the same fact in two lengths; repaint both in
+   place so marking a piece played never re-renders the panel you are standing in */
+function paintPlayed(id){
+  const r = repItem(id);
+  document.querySelectorAll("[data-playchip]").forEach(el => {
+    if (el.dataset.playchip !== id) return;
+    el.textContent = !r ? "" : el.dataset.playfmt === "full" ? playedFull(r) : playedShort(r);
+    if (el.classList.contains("mrlast")) el.classList.toggle("due", !!r && isDue(r));
+  });
+  document.querySelectorAll("button[data-mrplayed]").forEach(b => {
+    if (b.dataset.mrplayed !== id) return;
+    const on = playedToday(id);
+    b.setAttribute("aria-pressed", String(on));
+    b.textContent = on ? "Played today \u2713" : "Mark as played today";
+  });
+  document.querySelectorAll("button[data-mrplay]").forEach(b => {
+    if (b.dataset.mrplay !== id || !r) return;
+    const on = playedToday(id);
+    b.setAttribute("aria-pressed", String(on));
+    b.title = on ? "Played today \u2014 select to undo" : "Mark as played today";
+    b.classList.toggle("due", isDue(r));
+  });
+  document.querySelectorAll("[data-playcount]").forEach(el => {
+    if (el.dataset.playcount === id) el.textContent = r ? playCountTxt(r) : "";
+  });
+}
 const repKey = (title, composer) => (title||"").trim().toLowerCase()+"␟"+(composer||"").trim().toLowerCase();
 function myRepHas(title, composer){ return myRep().some(r => repKey(r.title,r.composer)===repKey(title,composer)); }
 function addMyRepItem(title, composer, status){
@@ -2331,7 +2442,8 @@ function addMyRepItem(title, composer, status){
   if (!title || myRepHas(title, composer)) return;
   const list = myRep();
   list.push({id: "r"+Date.now()+Math.random().toString(36).slice(2,7), title, composer: (composer||"").trim(),
-             status: status==="polishing" ? "polishing" : "learning", note: ""});
+             status: status==="polishing" ? "polishing" : "learning", note: "",
+             added: isoDay(), played: []});
   setMyRep(list);
 }
 function renderMyRep(){
@@ -2358,10 +2470,17 @@ function renderMyRep(){
             <span class="mrst ${r.status}">${r.status==="learning"?"Learning":"Polishing"}</span>
             <span class="mrhd"><b>${esc(r.title)}</b>${r.composer ? ` <span class="mrcomp">${esc(r.composer)}</span>` : ""}</span>
             <span class="mrtempo mono" data-tempochip="${escAttr(key)}">${last ? `♩ = ${last.b}` : ""}</span>
+            <span class="mrlast${isDue(r) ? " due" : ""}"
+              data-playchip="${r.id}" data-playfmt="full">${esc(playedFull(r))}</span>
           </span>
           <span class="mrnotepv">${esc(r.note||"")}</span>
         </summary>
         <div class="mrbody">
+          <div class="mrplayrow">
+            <button type="button" class="mrplayed" data-mrplayed="${r.id}"
+              aria-pressed="${playedOn(r)}">${playedOn(r) ? "Played today ✓" : "Mark as played today"}</button>
+            <span class="mrplaycount" data-playcount="${r.id}">${playCountTxt(r)}</span>
+          </div>
           <label class="mrnotelbl">Note
             <input type="text" class="mrnote" data-mrnote="${r.id}" value="${escAttr(r.note||"")}"
               placeholder="Where you stopped, a trouble spot…" maxlength="200"></label>
@@ -2461,6 +2580,8 @@ document.getElementById("p-repertoire").addEventListener("click", e => {
   if (gk){ const [kind,id] = gk.dataset.goscale.split(":"); goToScale(kind,id); return; }
   const ar = e.target.closest("button[data-addrep-title]");
   if (ar){ addMyRepItem(ar.dataset.addrepTitle, ar.dataset.addrepComposer, "learning"); renderMyRepIn(); renderToday(); return; }
+  const pd = e.target.closest("button[data-mrplayed]");
+  if (pd){ togglePlayed(pd.dataset.mrplayed); paintPlayed(pd.dataset.mrplayed); renderToday(); return; }
   const ms = e.target.closest("button[data-mrstatus]");
   if (ms){
     const list = myRep(); const item = list.find(r=>r.id===ms.dataset.mrstatus);
