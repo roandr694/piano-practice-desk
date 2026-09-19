@@ -399,6 +399,12 @@ tr.is-today td{background:var(--brass-soft)}
 .studychips button{font-family:"IBM Plex Mono",monospace;font-size:11px;background:var(--sunk);
   border:1px solid var(--rule);border-radius:5px;padding:2px 7px;cursor:pointer;color:var(--muted)}
 .studychips button:hover{border-color:var(--brass);color:var(--ink)}
+/* a study code inside running prose ("A1 and A2, then A3...") -- it sits in the sentence it
+   belongs to rather than becoming a chip, but it opens the study */
+.codelink{font:inherit;font-family:"IBM Plex Mono",monospace;font-size:.93em;letter-spacing:.03em;
+  background:none;border:0;padding:0;color:var(--brass);cursor:pointer;
+  border-bottom:1px solid var(--brass-soft)}
+.codelink:hover{border-bottom-color:var(--brass)}
 .sourcerow{display:flex;flex-wrap:wrap;gap:9px;align-items:center;font-size:12px;
   padding-top:9px;border-top:1px solid var(--rule)}
 .pd-badge,.cr-badge{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
@@ -628,6 +634,14 @@ const store = {
 };
 const esc = s => String(s).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const escAttr = s => esc(s).replace(/"/g, "&quot;");
+/* Study codes run through the site's prose -- the warm-up block is literally "A1 and A2, then
+   A3 for no more than three minutes, then A6", and the curriculum table says "Double thirds
+   (C16, C17)" -- and until now you had to go find them in the Studies tab by hand. Escapes
+   first, then links only the tokens that resolve to a real study, so prose that happens to
+   contain a non-code is left alone. */
+const studyCode = c => DATA.studies.some(s => s.code === c);
+const linkCodes = t => esc(t).replace(/\b[A-D][0-9]{1,2}\b/g, c => studyCode(c)
+  ? `<button type="button" class="codelink" data-gostudy="${c}">${c}</button>` : c);
 const matchLevel = (lvlStr, filter) =>
   filter==="All" || lvlStr==="all" || lvlStr.split(/[–-]/).includes(filter);
 const plate = (id, title, meta) => {
@@ -1350,7 +1364,7 @@ function renderToday(){
         return `
         <label class="block${done.includes(i)?" done":""}"${run&&run.i===i?' style="border-color:var(--brass)"':""}>
           <span class="min">${b[0]}<small>min</small></span>
-          <span><b>${esc(b[1])}</b><p>${esc(b[2])}</p>
+          <span><b>${esc(b[1])}</b><p>${linkCodes(b[2])}</p>
             ${rep.length ? `<div class="repchips">${rep.map(r=>{
               const on = playedOn(r);
               return `<button type="button" class="repchip ${r.status}${isDue(r) ? " due" : ""}"
@@ -1431,6 +1445,8 @@ document.getElementById("p-today").addEventListener("click", e => {
   if (e.target.closest("[data-nextmonth]")){ setCurMonth(curMonth+1); return; }
   if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
   if (e.target.closest("[data-exportlog]")){ exportLogCSV(); return; }
+  const gc = e.target.closest("button[data-gostudy]");
+  if (gc){ e.preventDefault(); goToStudy(gc.dataset.gostudy); return; }
   const gi = e.target.closest("button[data-goitem]");
   if (gi){
     /* inside the block's label, like the repertoire chips: without this the tap
@@ -2166,7 +2182,7 @@ function renderPlan(){
   <div class="tw"><table><thead><tr><th class="n" style="width:11%">Minutes</th>
     <th style="width:22%">Block</th><th>What to do</th></tr></thead>
   <tbody>${bl.map(b=>`<tr><td class="n">${b[0]}</td><td><b>${esc(b[1])}</b></td>
-    <td>${esc(b[2])}</td></tr>`).join("")}
+    <td>${linkCodes(b[2])}</td></tr>`).join("")}
     <tr><td class="n"><b>${tot}</b></td><td colspan="2" style="color:var(--muted)">total &mdash;
       start it from the Session tab and the clock runs itself</td></tr></tbody></table></div>
   <h2 id="sec-weekly">The weekly cycle</h2>
@@ -2175,7 +2191,9 @@ function renderPlan(){
   <div class="tw"><table><thead><tr><th>Day</th><th>Focus</th><th>Studies</th><th>Scale group</th></tr></thead>
   <tbody>${DATA.week.map((w,i)=>`<tr class="${i===realDay?"is-today":""}">
     <td><b>${w.day}</b></td><td>${esc(w.focus)}</td>
-    <td class="mono">${w.studies.join(" \u00b7 ")||"\u2014"}</td><td>${esc(w.scales)}</td></tr>`).join("")}</tbody></table></div>
+    <td class="mono">${w.studies.map(c=>
+      `<button type="button" class="codelink" data-gostudy="${c}">${c}</button>`).join(" \u00b7 ")
+      ||"\u2014"}</td><td>${esc(w.scales)}</td></tr>`).join("")}</tbody></table></div>
   <h2 id="sec-monthly">The monthly cycle</h2>
   <div class="tw"><table><thead><tr><th>Week</th><th>Role</th><th>What changes</th></tr></thead>
   <tbody>${DATA.month.map(m=>`<tr><td><b>${m[0]}</b></td><td>${m[1]}</td><td>${esc(m[2])}</td></tr>`).join("")}</tbody></table></div>
@@ -2189,7 +2207,7 @@ function renderPlan(){
   <tbody>${DATA.year.map(y=>{ const isCur = y[0]===curMonth;
     return `<tr id="year-${y[0]}"${y[0]>12?' style="background:var(--brass-soft)"':""}>
     <td class="n">${y[0]}</td><td><b>${esc(y[1])}</b></td>
-    <td>${esc(y[2])}</td><td>${esc(y[3])}</td>
+    <td>${linkCodes(y[2])}</td><td>${esc(y[3])}</td>
     <td class="n">${isCur ? '<span class="curbadge">You are here</span>'
       : `<button type="button" class="setmonth" data-setmonth="${y[0]}">Set current</button>`}</td></tr>`;
   }).join("")}</tbody></table></div>
@@ -2235,6 +2253,9 @@ function renderPlan(){
   });
   document.querySelectorAll("#p-plan button[data-exporttempo]").forEach(b=>{
     b.onclick = exportTempoCSV;
+  });
+  document.querySelectorAll("#p-plan button[data-gostudy]").forEach(b=>{
+    b.onclick = () => goToStudy(b.dataset.gostudy);
   });
 }
 
