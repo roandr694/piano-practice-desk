@@ -208,6 +208,13 @@ p.note{color:var(--muted);max-width:66ch;margin:0 0 14px}
 .keygrid button .s{font-size:10.5px;color:var(--faint)}
 .keygrid button[aria-pressed="true"]{background:var(--felt);border-color:var(--felt);color:var(--on-felt)}
 .keygrid button[aria-pressed="true"] .s{color:var(--felt-soft)}
+/* this month's curriculum keys, marked where you pick a key rather than only once you have
+   picked one (the badge under the grid has always needed you to guess right first) */
+.keygrid button{position:relative}
+.keygrid button[data-cur]{border-color:var(--brass)}
+.keygrid button[data-cur]::after{content:"";position:absolute;top:5px;right:5px;width:5px;
+  height:5px;border-radius:50%;background:var(--brass)}
+.keygrid button[aria-pressed="true"][data-cur]::after{background:var(--on-felt)}
 .fingtab{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin-top:12px;font-size:13.5px}
 .fingtab dt{color:var(--faint);font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding-top:2px}
 .fingtab dd{margin:0;font-family:"IBM Plex Mono",monospace;letter-spacing:.09em}
@@ -1258,6 +1265,16 @@ function monthPool(){
   if (!all) return null;
   return {majors: all.maj ? DATA.majors : [], minors: all.min ? DATA.minors : []};
 }
+/* The grid marks a key only when the month names a few of them: months that put all twelve
+   in play ("Review all 12 majors") would paint every key, which marks nothing. */
+function curKeyIds(kind){
+  const pool = monthPool();
+  if (!pool) return null;
+  const list = kind === "minor" ? pool.minors : pool.majors;
+  const whole = kind === "minor" ? DATA.minors : DATA.majors;
+  if (!list.length || list.length >= whole.length) return null;
+  return list.map(k => k.id);
+}
 /* Mon-Thu each name a form to pair with those keys. Friday (chromatic & contrary motion) and
    Saturday (cadence formula) name nothing this app holds per key; Sunday's line is "all of
    the month's keys, once each", and a "these two are stalest" prompt would contradict an
@@ -1503,9 +1520,11 @@ function renderScales(){
   </div>
   <div class="chips">${[["major","Major"],["harmonic","Harmonic minor"],["melodic","Melodic minor"],["natural","Natural minor"]]
     .map(([v,l])=>`<button type="button" data-form="${v}" aria-pressed="${v===scaleForm}">${l}</button>`).join("")}</div>
-  <div class="keygrid">${list.map((x,i)=>
-    `<button type="button" data-key="${i}" aria-pressed="${i===scaleKey}">
-      <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
+  <div class="keygrid">${(cur => list.map((x,i)=>
+    `<button type="button" data-key="${i}" aria-pressed="${i===scaleKey}"${cur && cur.includes(x.id)
+      ? ` data-cur aria-label="${escAttr(x.name)} &mdash; month ${yr[0]} curriculum key"` : ""}>
+      <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join(""))(
+    curKeyIds(isMaj ? "major" : "minor"))}</div>
   ${isCurMonthKey ? `<div style="margin:0 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
     <span class="curbadge">Month ${yr[0]} curriculum key</span>
     <button type="button" class="scorereset" style="margin-left:0" data-gomonth>View in the plan &rarr;</button>
@@ -1574,9 +1593,11 @@ function renderArps(){
     move across it. That lateral freedom is what separates a player who can handle Chopin from one
     who cannot.</p>
   </div>
-  <div class="keygrid">${DATA.majors.map((x,i)=>
-    `<button type="button" data-arp="${i}" aria-pressed="${i===arpKey}">
-      <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join("")}</div>
+  <div class="keygrid">${(cur => DATA.majors.map((x,i)=>
+    `<button type="button" data-arp="${i}" aria-pressed="${i===arpKey}"${cur && cur.includes(x.id)
+      ? ` data-cur aria-label="${escAttr(x.name)} arpeggio &mdash; month ${curMonth} curriculum key"` : ""}>
+      <span class="k">${x.short}</span><span class="s">${x.sig}</span></button>`).join(""))(
+    curKeyIds("major"))}</div>
   ${plate(k.arp, k.arplbl, "root position, two octaves \u00b7 major then parallel minor")}
   ${usedByHTML(usedByArp(k))}
   <div class="rctl playrow" style="margin:-6px 0 16px">
@@ -2113,7 +2134,9 @@ document.getElementById("p-drills").addEventListener("click", e => {
 let planLen = store.get("planlen","45");
 let curMonth = store.get("curmonth", 0);
 function curYearRow(){ return DATA.year.find(y=>y[0]===curMonth) || null; }
-function setCurMonth(n){ curMonth = n; store.set("curmonth", n); renderPlan(); renderToday(); renderScales(); }
+function setCurMonth(n){ curMonth = n; store.set("curmonth", n);
+  /* every panel that marks the month's keys has to be repainted, not just the plan */
+  renderPlan(); renderToday(); renderScales(); renderArps(); }
 /* End-of-month check, keyed by curriculum month (0 = no month set yet) so ticking every box in
    month 1 doesn't leave a permanently-stale, all-checked list sitting there in month 3. Migrates
    the old flat-array format (one shared list, no month) into the new {month: [indices]} shape the
