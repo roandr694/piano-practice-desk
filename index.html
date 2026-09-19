@@ -1215,6 +1215,77 @@ if (run){
   else { routine = run.r; viewDay = run.day; if (!run.paused) run.left = remaining(); tickLoop(); }
 }
 
+/* ---------- today's scales: turning "this week's group" into named items ----------
+   The Scales & arpeggios block has always described a shape ("two scales from this week's
+   group") without ever naming one, while the Studies block prints the day's studies and the
+   Repertoire block lists your own pieces. These helpers close that: the weekday line gives
+   the form, the curriculum month gives the keys, and the tempo book says which of them you
+   have left longest. */
+const TEMPO_DUE = 7;                 /* tempo is a weekly milestone, not daily attendance */
+const TODAY_SCALES_SHOW = 3;         /* the block asks for two; a third leaves a choice */
+/* Months 1-6 name their keys outright and parseMonthKeys reads them. Months 7-18 use review
+   language, so the ones that plainly name a whole class are written out here by hand rather
+   than parsed out of prose. A month absent from this table names no concrete key pool
+   ("Scales in thirds & sixths", "your weakest six keys") and gets no chips. */
+const MONTH_ALL = {
+  7:  {maj:true},              /* Review all 12 majors */
+  8:  {min:true},              /* All harmonic minors */
+  9:  {min:true},              /* All melodic minors */
+  12: {maj:true, min:true},    /* All 24 keys, four octaves */
+  13: {maj:true},              /* All majors, four octaves at speed */
+  17: {maj:true, min:true}     /* All 24 keys, thirds and sixths */
+};
+function monthPool(){
+  const yr = curYearRow();
+  if (!yr) return null;                                  /* no curriculum month set yet */
+  const mk = parseMonthKeys(yr);
+  if (mk) return {majors: mk.majors, minors: mk.minors};
+  const all = MONTH_ALL[yr[0]];
+  if (!all) return null;
+  return {majors: all.maj ? DATA.majors : [], minors: all.min ? DATA.minors : []};
+}
+/* Mon-Thu each name a form to pair with those keys. Friday (chromatic & contrary motion) and
+   Saturday (cadence formula) name nothing this app holds per key; Sunday's line is "all of
+   the month's keys, once each", and a "these two are stalest" prompt would contradict an
+   instruction that is explicitly all of them. */
+const DAY_SCALE = [
+  {kind:"scale", form:"major"},       /* Mon — Majors, this month's keys      */
+  {kind:"scale", form:"harmonic"},    /* Tue — Harmonic minors, same keys     */
+  {kind:"arp"},                       /* Wed — Arpeggios, all inversions      */
+  {kind:"scale", form:"melodic"},     /* Thu — Melodic minors, same keys      */
+  null, null, null
+];
+function dayScaleItems(day){
+  const spec = DAY_SCALE[day], pool = monthPool();
+  if (!spec || !pool) return [];
+  let out;
+  if (spec.kind === "arp")
+    out = pool.majors.map(k => ({key: "arp:" + k.id, name: k.name + " arpeggio"}));
+  else if (spec.form === "major")
+    out = pool.majors.map(k => ({key: "scale:" + k.id + ":major", name: k.name}));
+  else
+    out = pool.minors.map(k => ({key: "scale:" + k.id + ":" + spec.form,
+                                 name: k.name.replace(" minor", " " + spec.form + " minor")}));
+  out.forEach(o => { const l = tempoLast(o.key); o.last = l ? l.d : null; o.bpm = l ? l.b : null; });
+  /* never logged sorts first — that is the one left longest. Ties keep DATA's key order. */
+  out.sort((a,b) => a.last === b.last ? 0
+    : a.last === null ? -1 : b.last === null ? 1 : (a.last < b.last ? -1 : 1));
+  return out;
+}
+function dayScaleChipsHTML(day){
+  const items = dayScaleItems(day);
+  if (!items.length) return "";
+  const shown = items.slice(0, TODAY_SCALES_SHOW);
+  return `<div class="repchips">${shown.map(s => {
+    const stale = s.last === null || daysSince(s.last) >= TEMPO_DUE;
+    return `<button type="button" class="repchip${stale ? " due" : ""}" data-goitem="${escAttr(s.key)}"
+      title="Open ${escAttr(s.name)}">${esc(s.name)}<span class="rcwhen">${s.last === null
+        ? "no tempo yet" : "&#x2669; = " + s.bpm + " &middot; " + esc(tempoWhen(s.last))}</span></button>`;
+  }).join("")}</div>
+  <p class="rchint">Longest since a logged tempo first${items.length > shown.length
+    ? ` &mdash; ${shown.length} of ${items.length} this month` : ""}. Open one to log today's.</p>`;
+}
+
 function renderToday(){
   const d = DATA.week[viewDay];
   const blocks = blocksOf(routine);
@@ -1275,6 +1346,7 @@ function renderToday(){
       <h3 class="sub">The session &middot; ${total} minutes</h3>
       <div class="blocks">${blocks.map((b,i)=>{
         const rep = b[1]==="Repertoire" ? byStaleness() : [];
+        const scaleChips = b[1]==="Scales & arpeggios" ? dayScaleChipsHTML(viewDay) : "";
         return `
         <label class="block${done.includes(i)?" done":""}"${run&&run.i===i?' style="border-color:var(--brass)"':""}>
           <span class="min">${b[0]}<small>min</small></span>
@@ -1287,6 +1359,7 @@ function renderToday(){
                 >${r.status==="learning"?"Learning":"Polishing"} &middot; ${esc(r.title)}<span class="rcwhen"
                   data-playchip="${r.id}">${esc(playedShort(r))}</span></button>`;}).join("")}</div>
               <p class="rchint">Longest untouched first &mdash; select one once you have played it.</p>` : ""}
+            ${scaleChips}
           </span>
           <input type="checkbox" data-i="${i}"${done.includes(i)?" checked":""} aria-label="Mark ${esc(b[1])} done">
         </label>`;
@@ -1358,6 +1431,14 @@ document.getElementById("p-today").addEventListener("click", e => {
   if (e.target.closest("[data-nextmonth]")){ setCurMonth(curMonth+1); return; }
   if (e.target.closest("[data-gomonth]")){ goToMonth(); return; }
   if (e.target.closest("[data-exportlog]")){ exportLogCSV(); return; }
+  const gi = e.target.closest("button[data-goitem]");
+  if (gi){
+    /* inside the block's label, like the repertoire chips: without this the tap
+       would also tick the block's "done" checkbox */
+    e.preventDefault();
+    tempoGo(gi.dataset.goitem);
+    return;
+  }
   const pl = e.target.closest("button[data-mrplay]");
   if (pl){
     /* the chip sits inside the block's <label>: without this the tap would also
