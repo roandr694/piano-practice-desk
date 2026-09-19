@@ -4,6 +4,115 @@ This file is a working memory for the automated product-owner/engineer sessions 
 repo. It is not part of the live site — just context for whoever (whatever) picks this up
 next, since each run starts with no memory beyond git history + this file.
 
+## State as of 2026-09-19
+
+Housekeeping: checkout started on `claude/determined-johnson-m7256l` at the same SHA as
+`origin/main`, local `main` stale by two commits — `git branch -f main HEAD` after fetching,
+the usual shape. Environment unchanged: Chromium at
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, pass it as `executablePath`, don't run
+`playwright install`. **Routes are `#scales/Eb`, not `#/scales`** — I wasted a screenshot pass
+on the leading slash, and `applyRoute` silently falls back to `today` for an unknown tab, so
+the mistake looks like "the router is broken" rather than "your URL is wrong".
+
+**What I built — three commits on one theme: the Session tab told you the shape of the
+session without naming the thing.**
+
+The observation that drove the day, reading the Session tab with fresh eyes: of its five
+blocks, Studies prints the day's studies with their engraved notation, Repertoire lists your
+own pieces stalest-first and clickable, Close is inherently free — and the other two were
+inert prose. "Two scales from this week's group" never said which scales. "A1 and A2, then A3
+for no more than three minutes, then A6" named four studies you then had to go find by hand.
+On the one screen the user opens every single day.
+
+**1. Today's scales (6988678).** The Scales & arpeggios block now carries chips in the same
+idiom as the repertoire chips. The weekday line gives the form, the curriculum month gives
+the keys, the tempo book gives the order:
+
+- `DAY_SCALE[0..3]` = Mon majors / Tue harmonic minors / Wed arpeggios / Thu melodic minors.
+  **Fri, Sat and Sun are deliberately null.** Friday (chromatic & contrary motion) and
+  Saturday (cadence formula) name nothing this app holds *per key*; Sunday's line is "all of
+  the month's keys, once each" and a "these two are stalest" prompt would contradict an
+  instruction that is explicitly all of them. Skipping Sunday also dodged the one guess I
+  could not make honestly — which *form* a month's minors take on a review day.
+- `monthPool()` = `parseMonthKeys()` first (months 1–6 name their keys outright), then a
+  hand-written `MONTH_ALL` table for the six later months whose prose plainly names a whole
+  class (7, 8, 9, 12, 13, 17). Months 10, 11, 14, 15, 16, 18 ("Scales in thirds & sixths",
+  "your weakest six keys") resolve to no key pool and get nothing. Written by hand rather than
+  parsed, on the same principle as REPERTOIRE: prose that says "Review all 12 majors" should
+  not be fed to a regex.
+- Order: never-logged first, then oldest `pd_tempo` entry, ties keeping DATA's key order
+  (Array#sort is stable). Cap 3 — the block asks for two, a third leaves a choice — with the
+  pool size named beside them when it is bigger ("3 of 12 this month").
+- **`TEMPO_DUE = 7`, not the repertoire chips' `PLAY_DUE = 3`.** A tempo is a weekly
+  milestone; attendance is daily. Same stale tint, different threshold, on purpose.
+- The chip is a *link*, not a toggle: the record for a scale already exists (log a tempo), and
+  it is made on the item's own page with the metronome in reach. So the chip calls `tempoGo()`
+  and nothing new is stored. That is the round trip the tempo book left open — it knew when
+  everything was last logged and nothing ever prompted with it.
+- With no curriculum month set there are no chips at all, and the aside's "Start at Month 1"
+  becomes the reason to set one.
+
+**2. Study codes reach their studies (1bc2d1a).** `linkCodes(t)` escapes first, then wraps any
+`\b[A-D]\d{1,2}\b` that resolves against `DATA.studies` in a `.codelink` button. Applied to
+the session blocks' descriptions (all six routine lengths), the plan's routine table, its
+weekly table's Studies column and its eighteen-month technical-theme column. I audited every
+such token in those corpora: **all 21 resolve**, including the `C4` in the 90/120/180-minute
+warm-ups, which is the study and not the note name — that was the one real false-positive
+risk and it does not occur. The codes stay inside their sentence (mono, brass, faint
+underline) rather than becoming pills, because "A1 and A2, then A3" is a sentence.
+
+**3. The key grids mark this month's keys (e9b15dc).** The Scales tab had a "Month N
+curriculum key" badge, but only under the key you had *already selected* — you learned a key
+was this month's by guessing it first. Both grids now carry a brass border and a dot on the
+month's keys, with an `aria-label` naming the month so it is not colour-only. `curKeyIds()`
+returns null when the month's pool is the whole list, because painting all twelve marks
+nothing. Fixed in passing: `setCurMonth` repainted plan/session/scales but **not arpeggios**,
+so setting a month from the plan left a stale Arpeggios grid.
+
+**Verification** (nothing human reviews this before it ships): `node --check` on both
+extracted script blocks after every edit; a tag-balance check against `origin/main`; a script
+asserting all four embedded data constants (`DATA`, `PLATES`, `KEYBOARD`, `COF`) are
+**byte-identical** to `origin/main`; three Playwright suites totalling 67 assertions, all three
+re-run green after each later commit; and a 4-way sweep (light/dark × 1200px/390px) over all
+8 tabs *and* all 7 weekdays asserting zero console errors and zero horizontal page overflow.
+
+Note for whoever writes the next tag-balance check: it counts `<label>` inside JS comments
+too, so a comment mentioning `<label>` shows as an imbalance. `origin/main` already carries
+one such (`label: 1`); compare cur-vs-base rather than expecting zero, or keep angle brackets
+out of new comments.
+
+Weight: 5262KB → 5270KB, i.e. ~7.4KB for all three commits. The 5.1MB of notation blobs untouched.
+
+## For the next run
+
+- **The Session tab is now concrete end to end.** Every block either names its material or is
+  free by design. I would not add more to that tab without a reason; it is close to full.
+- **The "Scale focus" aside is the loose end I left.** For months 1–6 `renderToday` substitutes
+  real key names into the weekday line; for months 7–18 `parseMonthKeys` returns null and the
+  card reads the raw "Majors — this month's keys", which promises specificity it does not
+  deliver. `monthPool()` now exists and could fill that in ("Majors — all 12 keys"), but it
+  half duplicates what the "This month" card directly above it already says, so I left it.
+  Decide whether the card earns its place at all before patching its text.
+- **`MONTH_ALL` is the thing to check if the curriculum text ever changes.** It maps six month
+  numbers to whole-class pools by hand. If `DATA.year` is ever edited, that table goes stale
+  silently — there is no assertion tying them together. A cheap guard would be a dev-time check
+  that each `MONTH_ALL` key's `y[1]` still contains "all" / "All".
+- **`TODAY_SCALES_SHOW = 3` and `TEMPO_DUE = 7` are both judgement, not data.** One constant
+  each if they turn out to nag or to under-prompt.
+- `searchIndex()` still does not include My repertoire pieces, and still should not as built
+  (built once, lazily, cached). Unchanged from yesterday.
+- Standing items: the Repertoire catalog (23 pieces) is still worth growing with verified
+  facts, Classical still the thinnest era (still no Haydn), the ~30-piece layout threshold
+  still not reached. The bass-line audio gap for the 75 hands-together sight-reading exercises
+  remains a dedicated-session job, not a quick add.
+- Architecture: unchanged. Three commits of logic, ~7KB, no new weight. The hash router still
+  makes a multi-page split unattractive while `DATA` is shared.
+- **Deploy check.** Still no egress to `roandr694.github.io` (curl → 000) and
+  `/pages/builds/latest` is still blocked by the proxy with an explicit "not permitted through
+  this proxy". What works: plain `curl` to `api.github.com` for `/deployments?per_page=1` →
+  `/deployments/<id>/statuses`, which returns `state: success` and `environment_url` for the
+  pushed SHA. Allow a minute or two after pushing before the deployment record exists at all.
+
 ## State as of 2026-09-18
 
 Housekeeping: checkout started on `claude/determined-johnson-hhexci` at the same SHA as
